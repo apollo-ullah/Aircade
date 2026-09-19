@@ -166,3 +166,16 @@ Native populated leaderboard UI rendered and inspected at the minimum 1120 × 76
 The station is running on loopback port 8787 with persistent Docker storage. No real attendee scores or invented competitive scores were inserted. The source/build and integration tests establish software behavior; an actual badge/camera/lighting test, physical rank change and updated two-controller acceptance remain outstanding. See `BADGE-STATION.md` and `docs/FINALIST-READINESS.md` for those gates.
 
 The final release build and strict bundle signature verification pass. A final rendered Tennis check completed 60 seconds with 24 returns, zero misses, 10,040 points and zero queued scores; its updated results UI was inspected. Evidence: `build/badge-tennis-ui/tennis-smoke-result.json` and `tennis-results-ui.png`. This was explicitly simulated.
+
+
+## Per-app Mac speaker output — September 19
+
+Added a saved **air → Settings → Sound → Audio output** choice: Mac speakers (default) or System default, plus Test sound. Music, synthesized menu cues and game effects all use explicit Core Audio device UIDs. The setting never writes the system default, and speakers being unavailable suppresses playback instead of falling back to AirPods. Device/default-output notifications refresh the selection; all decoding, sound startup, playback and rerouting stay on dedicated audio queues.
+
+The original `AVAudioEngine` menu cue generator now encodes the same synthesized tones as short in-memory PCM WAV clips, played with `AVAudioPlayer.currentDevice`, matching music routing. Game effects use `NSSound.playbackDeviceIdentifier`. The Apple SDK documents both as per-player output UIDs; [AVAudioPlayer reference](https://developer.apple.com/documentation/avfaudio/avaudioplayer/currentdevice). Core Audio speaker detection supports modern terminal types and legacy IOKit identifiers: this Mac reports terminal `0x0301` and internal-speaker source `ispk`. No device name matching is required.
+
+The on-device `--audio-output-check` passed with **MacBook Pro Speakers**: existing local music, menu cue and game effect each reported the speaker UID, while the system's default output stayed unchanged (AirPods Pro). The actual speaker route is checked; acoustic output and motion latency are not measured. Report: `build/audio-output-check/audio-output-check.json`; settings screenshot inspected at `build/audio-output-check/audio-settings.png`.
+
+Five new tests cover speaker selection despite an AirPods system default, no fallback to headphones, modern/legacy speaker identifiers, system-default selection, preference persistence, and decoding generated cues as audible mono PCM with the expected duration. Existing tone tests also pass. The release build and strict signature verification succeed.
+
+The final full Swift suite passes **174 tests** (79 MotionCore, 3 ControllerLink, 92 app-model); log: `/tmp/aircade-audio-full-tests.log`.

@@ -138,6 +138,7 @@ struct ArcadeSettingsView: View {
     @ObservedObject var motion: MotionModel
     var open: (Route) -> Void
     @State private var menuSound = WiiAudio.shared.enabled
+    @ObservedObject private var audioOutput = AudioOutput.shared
 
     var body: some View {
         ScrollView {
@@ -146,7 +147,20 @@ struct ArcadeSettingsView: View {
                     .font(WiiTheme.display(34)).foregroundStyle(WiiTheme.accentDeep)
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Sound").font(WiiTheme.display(22))
-                    Toggle("Menu sounds", isOn: $menuSound)
+                    Picker("Audio output", selection: Binding(get: { audioOutput.preference }, set: { audioOutput.select($0) })) {
+                        ForEach(AudioOutputPreference.allCases) { preference in
+                            Text(preference.title).tag(preference)
+                        }
+                    }.pickerStyle(.segmented)
+                    HStack {
+                        Label(audioOutput.status, systemImage: "speaker.wave.2.fill").font(.callout).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Test sound") { audioOutput.refresh(); GameAudio.shared.play("Glass") }
+                            .buttonStyle(WiiButtonStyle())
+                    }
+                    Text("Music and effects use this output. Your AirPods stay connected as controllers.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Toggle("Menu music and sounds", isOn: $menuSound)
                         .onChange(of: menuSound) {
                             WiiAudio.shared.enabled = menuSound
                             if !menuSound { WiiAudio.shared.stopMusic() }

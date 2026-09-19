@@ -2,7 +2,7 @@ import AVFoundation
 
 /// Synthesized interaction sounds. Nothing is bundled or downloaded; every cue
 /// is generated in process, so the repo carries no third-party audio.
-final class WiiAudio {
+final class WiiAudio: @unchecked Sendable {
     static let shared = WiiAudio()
 
     enum Cue: CaseIterable {
@@ -27,18 +27,32 @@ final class WiiAudio {
         }
     }
 
-    /// Enabled by default; Settings toggles it.
-    var enabled = true
+    /// UserDefaults is thread-safe; all player work stays on the audio queue.
+    var enabled: Bool {
+        get { UserDefaults.standard.object(forKey: "aircade.menuAudio") as? Bool ?? true }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "aircade.menuAudio")
+            queue.async { [self] in
+                if newValue { startMusicIfNeeded() }
+                else { music?.pause(); activeCue?.stop() }
+            }
+        }
+    }
 
-    private let engine = AVAudioEngine()
-    private let player = AVAudioPlayerNode()
-    private let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
-    private var buffers: [Cue: AVAudioPCMBuffer] = [:]
+    private var cues: [Cue: AVAudioPlayer] = [:]
+    private var activeCue: AVAudioPlayer?
     private let queue = DispatchQueue(label: "Aircade.WiiAudio", qos: .userInitiated)
-    private var started = false
     private var music: AVAudioPlayer?
+    private var musicRequested = false
+    private let output = AudioOutput.shared
+    private var outputObserver: NSObjectProtocol?
 
-    private init() {}
+    private init() {
+        outputObserver = NotificationCenter.default.addObserver(forName: .aircadeAudioOutputChanged, object: nil, queue: nil) { [weak self] note in
+            guard let self, note.object as? AudioOutput === self.output else { return }
+            self.queue.async { [weak self] in self?.reroute() }
+        }
+    }
 
     /// A short sine burst with a raised-cosine envelope, so it fades in and out
     /// instead of clicking at the buffer edges.
@@ -54,11 +68,20 @@ final class WiiAudio {
 
     func play(_ cue: Cue) {
         guard enabled else { return }
+        let requested = ProcessInfo.processInfo.systemUptime
         queue.async { [self] in
-            startIfNeeded()
-            guard let buffer = buffers[cue] else { return }
-            player.scheduleBuffer(buffer, at: nil, options: .interrupts)
-            if !player.isPlaying { player.play() }
+            guard enabled, ProcessInfo.processInfo.systemUptime - requested < 0.3,
+                  let destination = output.destination else { return }
+            if cues[cue] == nil {
+                let samples = Self.tone(frequency: cue.frequency, duration: cue.duration, sampleRate: 44_100)
+                cues[cue] = try? AVAudioPlayer(data: Self.wave(samples: samples))
+            }
+            guard let player = cues[cue] else { return }
+            activeCue?.stop()
+            player.currentDevice = destination.uid
+            player.currentTime = 0
+            if !player.play() { output.reportPlaybackFailure() }
+            activeCue = player
         }
     }
 
@@ -66,7 +89,16 @@ final class WiiAudio {
     /// bundle. Nothing ships in that folder and it is gitignored, so this is a
     /// no-op on a clean checkout.
     func startMusic() {
-        guard enabled, music == nil else { return }
+        queue.async { [self] in musicRequested = true; startMusicIfNeeded() }
+    }
+
+    private func startMusicIfNeeded() {
+        guard enabled, musicRequested, let destination = output.destination else { return }
+        if let music {
+            music.currentDevice = destination.uid
+            if !music.isPlaying, !music.play() { output.reportPlaybackFailure() }
+            return
+        }
         let folder = Bundle.main.bundleURL.deletingLastPathComponent()
             .appendingPathComponent("Resources/Music", isDirectory: true)
         let tracks = (try? FileManager.default.contentsOfDirectory(at: folder,
@@ -76,30 +108,50 @@ final class WiiAudio {
               let player = try? AVAudioPlayer(contentsOf: track) else { return }
         player.numberOfLoops = -1
         player.volume = 0.35
-        player.play()
+        player.currentDevice = destination.uid
+        if !player.play() { output.reportPlaybackFailure() }
         music = player
     }
 
     func stopMusic() {
-        music?.stop()
-        music = nil
+        queue.async { [self] in
+            musicRequested = false
+            music?.stop(); music = nil
+        }
     }
 
-    private func startIfNeeded() {
-        guard !started else { return }
-        started = true
-        for cue in Cue.allCases {
-            let samples = Self.tone(frequency: cue.frequency, duration: cue.duration,
-                                    sampleRate: format.sampleRate)
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
-                                                frameCapacity: AVAudioFrameCount(samples.count)),
-                  let channel = buffer.floatChannelData?[0] else { continue }
-            samples.withUnsafeBufferPointer { channel.update(from: $0.baseAddress!, count: samples.count) }
-            buffer.frameLength = AVAudioFrameCount(samples.count)
-            buffers[cue] = buffer
+    private func reroute() {
+        activeCue?.stop()
+        music?.pause()
+        // Keep the existing playback position; never fall back to AirPods if speakers disappear.
+        startMusicIfNeeded()
+    }
+
+    func outputDeviceUIDs() async -> [String: String] {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                var devices: [String: String] = [:]
+                if let uid = music?.currentDevice { devices["music"] = uid }
+                if let uid = activeCue?.currentDevice { devices["menuCue"] = uid }
+                continuation.resume(returning: devices)
+            }
         }
-        engine.attach(player)
-        engine.connect(player, to: engine.mainMixerNode, format: format)
-        try? engine.start()
+    }
+
+    /// Small in-memory PCM clips let music and synthesized cues use the same UID routing API.
+    static func wave(samples: [Float], sampleRate: UInt32 = 44_100) -> Data {
+        var data = Data()
+        func number<T: FixedWidthInteger>(_ value: T) {
+            var little = value.littleEndian
+            withUnsafeBytes(of: &little) { data.append(contentsOf: $0) }
+        }
+        let bytes = UInt32(samples.count * 2)
+        data.append(contentsOf: "RIFF".utf8); number(36 + bytes)
+        data.append(contentsOf: "WAVEfmt ".utf8); number(UInt32(16))
+        number(UInt16(1)); number(UInt16(1)); number(sampleRate); number(sampleRate * 2)
+        number(UInt16(2)); number(UInt16(16))
+        data.append(contentsOf: "data".utf8); number(bytes)
+        for sample in samples { number(Int16(max(-1, min(1, sample)) * 32767)) }
+        return data
     }
 }

@@ -11,6 +11,12 @@ Menu pointing uses the selected menu controller (change it in **air → Settings
 
 Tennis is a 60-second arcade rally against an automatic returner. Actual racket-face contact, face direction, and swing speed affect returns. The current opponent is deterministic logic, not a trained AI service. Avatars, more than one phone, and external haptic motors are deferred.
 
+## Audio output
+
+Open **air → Settings → Sound → Audio output**. **Mac speakers** is the default and is remembered across launches. Menu music, menu cues and game effects route directly to the built-in speakers while the AirPods remain connected for motion. **System default** follows the Mac's selected output instead. Use **Test sound** to check the route; the Mac's speaker volume/mute still applies.
+
+This setting only changes Aircade playback, not system-wide audio. Device changes refresh the route automatically. If built-in speakers are unavailable, speaker mode pauses audio instead of silently switching to AirPods. The existing menu music still plays on the home screen; routing does not add background music to other games.
+
 ## Badge profiles and local MongoDB
 
 Run `./scripts/start-station.sh` in a separate Terminal, then launch the app. **Guest play works immediately without the server.** Optionally open **Leaderboard → Scan hacker badge** to create or retrieve a profile. Results are stored in local MongoDB; opted-in players appear at http://127.0.0.1:8787. Each game has its own board, personal bests, next-rival score targets, and post-round rank-climb feedback. Demo/scripted results are excluded. The station supports a local MongoDB installation or Docker Desktop. See [BADGE-STATION.md](BADGE-STATION.md) for setup, privacy, offline retries, tests, and LAN sharing.
