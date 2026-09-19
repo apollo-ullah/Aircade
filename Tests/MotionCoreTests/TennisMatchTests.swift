@@ -69,4 +69,42 @@ final class TennisMatchTests: XCTestCase {
         XCTAssertEqual(match.score, 0)
         XCTAssertEqual(match.phase, .countdown)
     }
+
+    func testOpponentChoosesOnceForEachReturnAndInvalidPlansFallBack() {
+        final class CountingOpponent: TennisOpponentStrategy {
+            var calls = 0
+            func returnPlan(rally: Int, sequence: Int) -> TennisOpponentReturn {
+                calls += 1
+                return TennisOpponentReturn(targetX: .nan, flightDuration: -.infinity, delay: .nan)
+            }
+        }
+        let strategy = CountingOpponent()
+        var match = TennisMatch(); match.start()
+        match.advance(3, opponent: strategy); match.advance(0.25, opponent: strategy)
+        XCTAssertEqual(strategy.calls, 1)
+        XCTAssertTrue(match.ball!.duration.isFinite)
+        match.advance(match.ball!.duration, opponent: strategy)
+        XCTAssertNotNil(match.playerHit(speed: 2, horizontalDirection: 0))
+        match.advance(match.ball!.duration, opponent: strategy)
+        XCTAssertEqual(strategy.calls, 2)
+        match.advance(0.5, opponent: strategy)
+        XCTAssertEqual(strategy.calls, 2, "Delay and trajectory must use the same decision")
+        XCTAssertEqual(match.ball?.direction, .towardPlayer)
+        XCTAssertTrue(match.ball!.to.x.isFinite)
+    }
+
+    func testNonfiniteShotsDoNotScoreAndPausePreservesPendingReturn() {
+        var match = started()
+        match.advance(match.ball!.duration, opponent: opponent)
+        XCTAssertNil(match.playerHit(speed: .infinity, horizontalDirection: 0))
+        XCTAssertNil(match.playerHit(speed: 2, horizontalDirection: .nan))
+        XCTAssertEqual(match.score, 0)
+        XCTAssertNotNil(match.playerHit(speed: 2, horizontalDirection: 0))
+        match.advance(match.ball!.duration, opponent: opponent)
+        match.pause(); match.resume(); match.advance(2, opponent: opponent)
+        match.advance(0.3, opponent: opponent)
+        XCTAssertNil(match.ball, "Resume must preserve the original return delay")
+        match.advance(0.13, opponent: opponent)
+        XCTAssertEqual(match.ball?.direction, .towardPlayer)
+    }
 }

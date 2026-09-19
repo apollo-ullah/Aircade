@@ -5,6 +5,7 @@ public enum TennisPhase: String, Equatable { case menu, countdown, playing, paus
 public enum TennisBallDirection: Equatable { case towardPlayer, towardOpponent }
 
 public struct TennisBallFlight {
+    public let id: Int
     public let born: Double
     public let duration: Double
     public let from: SIMD3<Float>
@@ -28,6 +29,15 @@ public struct TennisOpponentReturn {
         self.targetX = targetX
         self.flightDuration = flightDuration
         self.delay = delay
+    }
+
+    /// Strategy output is a suggestion, never permission to put NaN or an
+    /// impossible flight into the deterministic match.
+    public func validated(fallback: TennisOpponentReturn) -> TennisOpponentReturn {
+        guard targetX.isFinite, flightDuration.isFinite, delay.isFinite else { return fallback }
+        return TennisOpponentReturn(targetX: min(0.9, max(-0.9, targetX)),
+                                    flightDuration: min(3, max(1.05, flightDuration)),
+                                    delay: min(2, max(0.15, delay)))
     }
 }
 
@@ -73,6 +83,7 @@ public struct TennisMatch {
     public private(set) var completed = false
     public private(set) var ball: TennisBallFlight?
     private var nextOpponentReturn: Double?
+    private var pendingPlan: TennisOpponentReturn?
     private var sequence = 0
 
     public var remaining: Double { max(0, Self.duration - elapsed) }
@@ -114,7 +125,7 @@ public struct TennisMatch {
             countdown = max(0, countdown - delta)
             if countdown == 0 {
                 phase = .playing
-                scheduleOpponentReturn(after: 0.25)
+                if ball == nil && nextOpponentReturn == nil { scheduleOpponentReturn(after: 0.25) }
             }
             return []
         }
@@ -133,16 +144,18 @@ public struct TennisMatch {
                 scheduleOpponentReturn(after: 0.9)
             } else {
                 ball = nil
-                let plan = opponent.returnPlan(rally: rally, sequence: sequence)
+                let plan = validatedPlan(opponent)
+                pendingPlan = plan
                 nextOpponentReturn = elapsed + plan.delay
             }
         }
 
         if let launchTime = nextOpponentReturn, elapsed >= launchTime, ball == nil {
             nextOpponentReturn = nil
-            let plan = opponent.returnPlan(rally: rally, sequence: sequence)
+            let plan = pendingPlan ?? validatedPlan(opponent)
+            pendingPlan = nil
             sequence += 1
-            ball = TennisBallFlight(born: elapsed, duration: plan.flightDuration,
+            ball = TennisBallFlight(id: sequence, born: elapsed, duration: plan.flightDuration,
                                     from: SIMD3<Float>(0, 0.05, -10.5),
                                     to: SIMD3<Float>(plan.targetX, -0.1, 0),
                                     arcHeight: 2.15, direction: .towardPlayer)
@@ -154,6 +167,7 @@ public struct TennisMatch {
             phase = .results
             ball = nil
             nextOpponentReturn = nil
+            pendingPlan = nil
             events.append(.finished)
         }
         return events
@@ -162,22 +176,39 @@ public struct TennisMatch {
     /// Returns nil unless the incoming ball is inside its strike window.
     @discardableResult
     public mutating func playerHit(speed: Float, horizontalDirection: Float) -> TennisEvent? {
+        guard horizontalDirection.isFinite else { return nil }
+        return playerHit(speed: speed, targetX: horizontalDirection * 0.34,
+                         flightDuration: 1.3 - Double(min(speed, 4)) * 0.06)
+    }
+
+    /// The scene adapter supplies a tested face contact and bounded shot response.
+    @discardableResult
+    public mutating func playerHit(speed: Float, targetX: Float, flightDuration: Double,
+                                   contactPoint: SIMD3<Float>? = nil) -> TennisEvent? {
+        guard speed.isFinite, targetX.isFinite, flightDuration.isFinite else { return nil }
+        if let contactPoint, !contactPoint.indices.allSatisfy({ contactPoint[$0].isFinite }) { return nil }
         guard phase == .playing, let incoming = ball, incoming.direction == .towardPlayer else { return nil }
         guard elapsed >= incoming.arrival - 0.32, elapsed <= incoming.arrival + 0.38, speed >= 0.75 else { return nil }
-        let contact = incoming.position(at: elapsed)
+        let contact = contactPoint ?? incoming.position(at: elapsed)
         rally += 1
         returns += 1
         longestRally = max(longestRally, rally)
-        let points = 100 + min(250, rally * 15) + min(150, Int(speed * 28))
+        let points = 100 + min(250, rally * 15) + Int(min(150, speed * 28))
         score += points
-        let aim = max(-1.1, min(1.1, horizontalDirection * 0.34))
-        ball = TennisBallFlight(born: elapsed, duration: max(0.9, 1.3 - Double(min(speed, 4)) * 0.06),
+        let aim = max(-1.1, min(1.1, targetX))
+        ball = TennisBallFlight(id: incoming.id, born: elapsed, duration: min(2, max(0.9, flightDuration)),
                                 from: contact, to: SIMD3<Float>(aim, 0.05, -10.5),
                                 arcHeight: 1.8, direction: .towardOpponent)
         return .playerReturn(points: points)
     }
 
     private mutating func scheduleOpponentReturn(after delay: Double) {
+        pendingPlan = nil
         nextOpponentReturn = elapsed + delay
+    }
+
+    private func validatedPlan(_ opponent: any TennisOpponentStrategy) -> TennisOpponentReturn {
+        let fallback = AutomaticReboundOpponent().returnPlan(rally: rally, sequence: sequence)
+        return opponent.returnPlan(rally: rally, sequence: sequence).validated(fallback: fallback)
     }
 }
