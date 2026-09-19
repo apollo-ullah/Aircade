@@ -5,3 +5,6 @@ build/
 
 .local/
 server/node_modules/
+.env
+__pycache__/
+*.py[cod]

@@ -3,6 +3,7 @@ import simd
 
 public enum TennisPhase: String, Equatable { case menu, countdown, playing, paused, results }
 public enum TennisBallDirection: Equatable { case towardPlayer, towardOpponent }
+public enum TennisStroke: String, Equatable { case forehand, backhand }
 
 public struct TennisBallFlight {
     public let born: Double
@@ -11,12 +12,26 @@ public struct TennisBallFlight {
     public let to: SIMD3<Float>
     public let arcHeight: Float
     public let direction: TennisBallDirection
+    public let bounce: SIMD3<Float>?
+    public let bounceProgress: Float
+    public let defenderContactX: Float?
     public var arrival: Double { born + duration }
+    public var bounceTime: Double? { bounce.map { _ in born + duration * Double(bounceProgress) } }
 
     public func position(at time: Double) -> SIMD3<Float> {
         let progress = Float(min(1, max(0, (time - born) / duration)))
-        let linear = simd_mix(from, to, SIMD3<Float>(repeating: progress))
-        return linear + SIMD3<Float>(0, sin(progress * .pi) * arcHeight, 0)
+        guard let bounce else {
+            let linear = simd_mix(from, to, SIMD3<Float>(repeating: progress))
+            return linear + SIMD3<Float>(0, sin(progress * .pi) * arcHeight, 0)
+        }
+        if progress <= bounceProgress {
+            let leg = progress / bounceProgress
+            let linear = simd_mix(from, bounce, SIMD3<Float>(repeating: leg))
+            return linear + SIMD3<Float>(0, sin(leg * .pi) * arcHeight, 0)
+        }
+        let leg = (progress - bounceProgress) / (1 - bounceProgress)
+        let linear = simd_mix(bounce, to, SIMD3<Float>(repeating: leg))
+        return linear + SIMD3<Float>(0, sin(leg * .pi) * arcHeight * 0.62, 0)
     }
 }
 
@@ -24,10 +39,12 @@ public struct TennisOpponentReturn {
     public let targetX: Float
     public let flightDuration: Double
     public let delay: Double
-    public init(targetX: Float, flightDuration: Double, delay: Double) {
+    public let stroke: TennisStroke
+    public init(targetX: Float, flightDuration: Double, delay: Double, stroke: TennisStroke = .forehand) {
         self.targetX = targetX
         self.flightDuration = flightDuration
         self.delay = delay
+        self.stroke = stroke
     }
 }
 
@@ -40,17 +57,20 @@ public protocol TennisOpponentStrategy {
 public struct AutomaticReboundOpponent: TennisOpponentStrategy {
     public init() {}
     public func returnPlan(rally: Int, sequence: Int) -> TennisOpponentReturn {
-        let lanes: [Float] = [0, -0.72, 0.62, -0.36, 0.82, 0.28]
+        let lanes: [Float] = [0, -1.55, 1.55, -3.10, 3.10]
         let lane = lanes[sequence % lanes.count]
         return TennisOpponentReturn(targetX: lane,
-                                    flightDuration: max(1.05, 1.55 - Double(min(rally, 10)) * 0.035),
-                                    delay: 0.42)
+                                    flightDuration: max(2.35, 2.9 - Double(min(rally, 10)) * 0.04),
+                                    delay: 0.42,
+                                    stroke: sequence.isMultiple(of: 2) ? .forehand : .backhand)
     }
 }
 
 public enum TennisEvent {
-    case opponentReturn
+    case opponentPreparing(contactX: Float, stroke: TennisStroke, delay: Double)
+    case opponentReturn(contactX: Float, stroke: TennisStroke)
     case playerReturn(points: Int)
+    case opponentMiss(ballX: Float, attemptedX: Float, points: Int)
     case miss
     case finished
 }
@@ -70,9 +90,12 @@ public struct TennisMatch {
     public private(set) var rally = 0
     public private(set) var longestRally = 0
     public private(set) var misses = 0
+    public private(set) var opponentMisses = 0
     public private(set) var completed = false
     public private(set) var ball: TennisBallFlight?
     private var nextOpponentReturn: Double?
+    private var pendingOpponentReturn: TennisOpponentReturn?
+    private var opponentContactX: Float = 0
     private var sequence = 0
 
     public var remaining: Double { max(0, Self.duration - elapsed) }
@@ -133,20 +156,51 @@ public struct TennisMatch {
                 scheduleOpponentReturn(after: 0.9)
             } else {
                 ball = nil
-                let plan = opponent.returnPlan(rally: rally, sequence: sequence)
+                let attemptedX = flight.defenderContactX ?? flight.to.x
+                if abs(attemptedX - flight.to.x) > 0.04 {
+                    opponentContactX = attemptedX
+                    opponentMisses += 1
+                    rally = 0
+                    let points = 300
+                    score += points
+                    events.append(.opponentMiss(ballX: flight.to.x, attemptedX: attemptedX, points: points))
+                    scheduleOpponentReturn(after: 0.9)
+                    if ballsLeft == 0 || elapsed >= Self.duration {
+                        completed = elapsed >= Self.duration
+                        phase = .results
+                        nextOpponentReturn = nil
+                        pendingOpponentReturn = nil
+                        events.append(.finished)
+                    }
+                    return events
+                }
+                opponentContactX = flight.to.x
+                let selected = opponent.returnPlan(rally: rally, sequence: sequence)
+                // Contact side determines which animation can physically meet the
+                // incoming ball; the policy remains responsible for the return.
+                let plan = TennisOpponentReturn(targetX: selected.targetX,
+                                                flightDuration: selected.flightDuration,
+                                                delay: selected.delay,
+                                                stroke: opponentContactX >= 0 ? .forehand : .backhand)
+                pendingOpponentReturn = plan
                 nextOpponentReturn = elapsed + plan.delay
+                events.append(.opponentPreparing(contactX: opponentContactX, stroke: plan.stroke, delay: plan.delay))
             }
         }
 
         if let launchTime = nextOpponentReturn, elapsed >= launchTime, ball == nil {
             nextOpponentReturn = nil
-            let plan = opponent.returnPlan(rally: rally, sequence: sequence)
+            let plan = pendingOpponentReturn ?? opponent.returnPlan(rally: rally, sequence: sequence)
+            pendingOpponentReturn = nil
             sequence += 1
             ball = TennisBallFlight(born: elapsed, duration: plan.flightDuration,
-                                    from: SIMD3<Float>(0, 0.05, -10.5),
+                                    from: SIMD3<Float>(opponentContactX, 0.05, -18),
                                     to: SIMD3<Float>(plan.targetX, -0.1, 0),
-                                    arcHeight: 2.15, direction: .towardPlayer)
-            events.append(.opponentReturn)
+                                    arcHeight: 2.25, direction: .towardPlayer,
+                                    bounce: SIMD3<Float>(plan.targetX * 0.72, -1.48, -4.2),
+                                    bounceProgress: 0.72,
+                                    defenderContactX: nil)
+            events.append(.opponentReturn(contactX: opponentContactX, stroke: plan.stroke))
         }
 
         if ballsLeft == 0 || elapsed >= Self.duration {
@@ -154,6 +208,7 @@ public struct TennisMatch {
             phase = .results
             ball = nil
             nextOpponentReturn = nil
+            pendingOpponentReturn = nil
             events.append(.finished)
         }
         return events
@@ -170,10 +225,26 @@ public struct TennisMatch {
         longestRally = max(longestRally, rally)
         let points = 100 + min(250, rally * 15) + min(150, Int(speed * 28))
         score += points
-        let aim = max(-1.1, min(1.1, horizontalDirection * 0.34))
-        ball = TennisBallFlight(born: elapsed, duration: max(0.9, 1.3 - Double(min(speed, 4)) * 0.06),
-                                from: contact, to: SIMD3<Float>(aim, 0.05, -10.5),
-                                arcHeight: 1.8, direction: .towardOpponent)
+        let aim = max(-4.6, min(4.6, horizontalDirection * 1.25))
+        let flightDuration = max(2.35, 3.05 - Double(min(speed, 4)) * 0.10)
+        let distance = abs(aim - opponentContactX)
+        // A centre recovery should remain comfortable after the character has
+        // moved sideways. Only a strong shot to the opposite outer lane should
+        // exceed the combination of foot speed and racket reach.
+        let movement = Float(flightDuration) * 1.35
+        let racketReach: Float = 1.0
+        let attemptedX: Float
+        if distance <= movement + racketReach {
+            attemptedX = aim
+        } else {
+            attemptedX = opponentContactX + (aim < opponentContactX ? -1 : 1) * movement
+        }
+        ball = TennisBallFlight(born: elapsed, duration: flightDuration,
+                                from: contact, to: SIMD3<Float>(aim, 0.05, -18),
+                                arcHeight: 2.05, direction: .towardOpponent,
+                                bounce: SIMD3<Float>(aim * 0.78, -1.48, -13.8),
+                                bounceProgress: 0.68,
+                                defenderContactX: attemptedX)
         return .playerReturn(points: points)
     }
 

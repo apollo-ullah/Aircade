@@ -1,0 +1,11 @@
+{
+  "modelVersion": "synthetic-logreg-v1",
+  "bias": 2.3013147562290297,
+  "weights": {
+    "distance": -1.6992337927726644,
+    "reactionTime": 1.507661988100572,
+    "pace": -1.0325021141334714,
+    "targetsWeakSide": -0.6961059919351223,
+    "rallyLength": -0.009633959081104839
+  }
+}

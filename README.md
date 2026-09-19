@@ -1,11 +1,19 @@
 # Aircade — Neon Rush
 
-Native macOS arcade: **hold an AirPod and play motion-controlled Neon Rush or Tennis**. Tennis begins as a 60-second rally challenge with automatic opponent returns. Includes the original slash/parry test lab and optional webcam hand position.
+Native macOS arcade: **hold an AirPod and play motion-controlled Neon Rush or Tennis**. Tennis is a 60-second rally challenge against an animated model-backed opponent. Includes the original slash/parry test lab and optional webcam hand position.
 SwiftUI + SceneKit + Core Motion. No third-party dependencies. macOS 14+, Xcode / Swift 5.9+.
 
 ## Badge profiles and local MongoDB
 
 Run `./scripts/start-station.sh` in a separate Terminal, then launch the app. Use **Scan badge** before physical play to create or retrieve a profile. Results are stored in local MongoDB; opted-in players appear at http://127.0.0.1:8787. Demo/scripted results are excluded. See [BADGE-STATION.md](BADGE-STATION.md) for setup, privacy, offline retries, tests, and LAN sharing.
+
+## Tennis model opponent
+
+The far-court character tracks incoming balls, prepares a forehand or backhand, and swings at the return. Swift owns animation and physics. Both directions of travel include a court bounce. Wide player shots are resolved against the opponent's current position, movement speed, available flight time, and racket reach; an unreachable ball produces a visible whiff and a 300-point winner. Between points, the app asks the local station API for a versioned candidate-return plan; gameplay always has a validated local fallback.
+
+For the adversarial LLM policy, create a Baseten Model API key and set `BASETEN_API_KEY` before running `./scripts/start-station.sh`. By default, the station calls `zai-org/GLM-5.3-Flash` through Baseten's shared OpenAI-compatible endpoint, so no model training or dedicated H100 deployment is required. Override `BASETEN_TENNIS_LLM_MODEL` or `BASETEN_TENNIS_LLM_URL` only when testing another compatible model or endpoint. The station asks the model to rank five validated court lanes between points, limits the answer to 96 tokens, rejects invented or missing candidate IDs, and falls back locally after 2.8 seconds. Inference is asynchronous; an answer that misses the current ball is used for a later return and never pauses rendering.
+
+The small Truss baseline and deterministic synthetic trainer remain in `baseten/tennis-opponent` as a second remote option. Configure `BASETEN_TENNIS_URL` instead of the LLM variables to use it. With neither remote configured, the server loads the same checked-in logistic-regression weights locally. See [`baseten/tennis-opponent/README.md`](baseten/tennis-opponent/README.md) for its deployment commands.
 
 ## Launch
 

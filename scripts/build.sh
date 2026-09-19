@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-swift build -c release
+swift build -c release --disable-sandbox
 APP="$PWD/build/Aircade.app"
 mkdir -p "$APP/Contents/MacOS"
 cp .build/release/Aircade "$APP/Contents/MacOS/Aircade"

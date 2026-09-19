@@ -134,6 +134,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         game.onRunStarted = { [weak self] demo in self?.players.beginRun(demo: demo) }
         game.onRunFinished = { [weak self] state, demo in self?.players.finishRun(state, demo: demo) }
         tennis.authorizeRun = { [weak self] in self?.players.authorize() ?? false }
+        tennis.activePlayerID = { [weak self] in self?.players.player?.id }
         tennis.onRunStarted = { [weak self] in self?.players.beginRun(demo: false) }
         tennis.onRunFinished = { [weak self] state in self?.players.finishTennis(state, demo: false) }
         tennis.enabled = false
