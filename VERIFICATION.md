@@ -42,3 +42,11 @@ The user confirmed the existing calibration and block hitting work well with the
 - The first revised screenshot check failed because rendering delayed fixed-time reconnect callbacks. The check now schedules each action after the previous capture completes and allows fresh motion samples before resume. The subsequent check passed.
 - Full-game motion here was **simulated**; these checks do not establish physical gameplay feel, camera accuracy, or haptic operation. Physical motor output, multiplayer, and an AI boss are not implemented.
 - Run `--game-smoke-test` with other Aircade instances closed. Its report and `game-*-ui.png` / `game-*-scene.png` captures are written to the existing local log directory.
+
+## Connection recovery — September 19, morning
+
+Bluetooth and Motion & Fitness permission were available, but the old app received zero motion samples even after a normal restart with the earbuds worn. Moved Core Motion callbacks off the main operation queue, added a thread-safe latest-reading buffer consumed on the main run loop, and made each reconnect create a fresh manager. Session tokens reject late callbacks from a previous connection. Setup now shows permission, sample count, update rate, a Reconnect button, and recovery instructions after five seconds without data.
+
+- All **25 unit tests passed**, including new buffer coalescing and stopped-session isolation tests; release build succeeded.
+- Reopened the updated app and observed **491 real Right AirPod samples**, approximately **33.5 Hz** consumed at the time of inspection, fresh sample age **33 ms**, active motion service, calibration reference set, and no motion error. This confirms recovery of the real input path in this session; it does not isolate whether queue delivery, recreating the connection, or the physical reconnection was the sole cause.
+- Calibration mappings remain per earbud. A Right source does not reuse a saved Left grip mapping.
