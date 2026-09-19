@@ -167,11 +167,18 @@ Run smoke checks separately with other Aircade instances closed. The lab check a
 
 The two scripted checks keep sound and visual effects enabled, verify full victory or defeat respectively, write `scripted-win-result.json` / `scripted-repro-result.json`, capture results, and exit. These unattended checks bypass background-focus pausing only for those two command-line flags. Normal interactive play still pauses when the app loses focus. `swift test` also exercises light contacts, wrong-direction cuts, hazards, replay, slow-frame recovery, and genuine tracking loss through the production game wrapper.
 
-Hardware verification remains pending until an actual labelled handheld trial succeeds. Build and unit tests cannot establish that the user's AirPods stream while held.
+The AirPod and iPhone controllers have both worked on physical hardware during development. The latest integrated release still needs a final cold-start acceptance run before judging; build and unit tests cannot establish Bluetooth responsiveness, calibration quality, or perceived haptic feel.
 
-## Scope and next milestone
+## Current scope
 
-This build implements one complete local arcade game, controller setup, motion mapping, optional optical translation, geometric cuts, and a timing/angle-based parry drill. It does not implement a learned boss, multiplayer, or physical haptic output. Game judgments and lab events are logged for the next USB haptic integration.
+This build implements a native motion arcade with persistent AirPod and iPhone controllers, controller-driven menu navigation, three playable channels, badge profiles, per-game leaderboards, and a model-backed Tennis rival:
+
+- **Neon Rush**: a complete three-round rhythm/slashing game with geometric cuts, hazards, directional targets, scoring, ranks and replay.
+- **Tennis**: a 60-second rally game with finite racket-face contact, bounces, an animated opponent, and asynchronous Baseten return planning with a validated local fallback.
+- **Saber Duel**: two-player AirPod + iPhone combat with independent motion streams, swept collisions, health, results and phone haptic cues.
+- **Practice**: calibration, diagnostics, the slash lab, parry drill, optional webcam translation and reproducible scripted checks.
+
+The current public Core Motion API exposes one AirPods motion stream at a time, so the duel uses an iPhone as its second independent controller. External USB haptic motors, multiple simultaneous phones, turn-based shared-earbud games and player avatars are deferred. The model selects bounded Tennis tactics between points; it is not an end-to-end trained physics agent, and gameplay never waits on network inference.
 
 ## Why this approach
 
