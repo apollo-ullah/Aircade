@@ -131,7 +131,9 @@ final class BasetenTennisOpponent: TennisOpponentStrategy {
         }
         var request = URLRequest(url: base.appendingPathComponent("api/tennis/opponent-plan"))
         request.httpMethod = "POST"
-        request.timeoutInterval = 3.2
+        // Planning is asynchronous and a late result is used for a later ball.
+        // Allow the station enough time for a shared Baseten model response.
+        request.timeoutInterval = 9
         request.setValue("Bearer \(config.token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)

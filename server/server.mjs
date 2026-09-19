@@ -210,7 +210,10 @@ async function fetchBasetenLLMPlan(body) {
     ({ id, targetX, flightDuration, delay, distance, reactionTime, pace, targetsWeakSide, rallyLength }));
   const started = performance.now();
   const response = await fetch(url, {
-    method: 'POST', signal: AbortSignal.timeout(2800),
+    // Shared Model API latency can spike even when a warm probe is fast. This
+    // runs between points and never blocks the render loop, so allow a useful
+    // background window before falling back locally.
+    method: 'POST', signal: AbortSignal.timeout(8000),
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
