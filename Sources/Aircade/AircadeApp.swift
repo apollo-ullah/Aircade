@@ -127,11 +127,7 @@ struct AircadeApp: App {
 struct ContentView: View {
     @ObservedObject var motion: MotionModel
     var body: some View {
-        Group {
-            if motion.showingLab { ArenaLayout(motion: motion, arena: motion.arena, camera: motion.camera) }
-            else if motion.selectedSport == .tennis { TennisView(motion: motion, game: motion.tennis, players: motion.players) }
-            else { NeonRushView(motion: motion, game: motion.game, players: motion.players) }
-        }
+        WiiShell(motion: motion)
     }
 }
 

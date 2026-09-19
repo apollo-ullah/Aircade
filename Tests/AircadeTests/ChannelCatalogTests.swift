@@ -4,7 +4,7 @@ import XCTest
 final class ChannelCatalogTests: XCTestCase {
     func testTheGridHoldsExactlySixChannelsInTheSpecifiedOrder() {
         XCTAssertEqual(ChannelCatalog.all.map(\.route),
-                       [.neonRush, .duel, .avatar, .controller, .lab, .scripts])
+                       [.neonRush, .tennis, .avatar, .controller, .lab, .scripts])
     }
 
     func testEveryChannelHasANameThatFitsOnOneLine() {
@@ -17,17 +17,17 @@ final class ChannelCatalogTests: XCTestCase {
     func testAPointInsideATileSelectsThatChannel() {
         let frames: [Route: CGRect] = [
             .neonRush: CGRect(x: 0, y: 0, width: 100, height: 100),
-            .duel: CGRect(x: 120, y: 0, width: 100, height: 100)
+            .tennis: CGRect(x: 120, y: 0, width: 100, height: 100)
         ]
         let size = CGSize(width: 240, height: 100)
         let hit = ChannelCatalog.channel(at: CGPoint(x: 0.7, y: 0.5), frames: frames, in: size)
-        XCTAssertEqual(hit, .duel)
+        XCTAssertEqual(hit, .tennis)
     }
 
     func testAPointInTheGapBetweenTilesSelectsNothing() {
         let frames: [Route: CGRect] = [
             .neonRush: CGRect(x: 0, y: 0, width: 100, height: 100),
-            .duel: CGRect(x: 120, y: 0, width: 100, height: 100)
+            .tennis: CGRect(x: 120, y: 0, width: 100, height: 100)
         ]
         let size = CGSize(width: 240, height: 100)
         XCTAssertNil(ChannelCatalog.channel(at: CGPoint(x: 0.458, y: 0.5), frames: frames, in: size))

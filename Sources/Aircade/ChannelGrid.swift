@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Route: Hashable {
-    case home, neonRush, duel, avatar, controller, lab, scripts, settings
+    case home, neonRush, tennis, duel, avatar, controller, lab, scripts, settings
 }
 
 struct Channel: Identifiable {
@@ -17,7 +17,7 @@ enum ChannelCatalog {
     /// Order is fixed by the spec and pinned by test.
     static let all: [Channel] = [
         Channel(route: .neonRush, title: "Neon Rush", symbol: "bolt.fill"),
-        Channel(route: .duel, title: "Saber Duel", symbol: "person.2.fill"),
+        Channel(route: .tennis, title: "Tennis", symbol: "figure.tennis"),
         Channel(route: .avatar, title: "Avatar", symbol: "face.smiling"),
         Channel(route: .controller, title: "Controller", symbol: "airpodspro"),
         Channel(route: .lab, title: "Training Lab", symbol: "target"),
@@ -35,6 +35,7 @@ extension Notification.Name {
     /// Posted by the shell when a flick should click at the cursor's position.
     /// The grid owns hover state, so it is the thing that can act on it.
     static let wiiPointerFlick = Notification.Name("WiiPointerFlick")
+    static let wiiRouteRequest = Notification.Name("WiiRouteRequest")
 }
 
 /// Reports each tile's frame up to the grid so the cursor can be hit-tested
