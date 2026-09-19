@@ -144,7 +144,7 @@ struct AircadeApp: App {
                         if motion.tennis.displayPhase == .paused { motion.tennis.resume() }
                         else if motion.tennis.displayPhase == .menu || motion.tennis.displayPhase == .results {
                             if motion.tennis.challengeSelected {
-                                if motion.tennis.liveReady { motion.tennis.challenge.start(playerName: motion.players.player?.nickname ?? "Guest", simulated: motion.activeInputSimulated, playerID: motion.players.player?.id) }
+                                if motion.tennis.liveReady || motion.tennis.challenge.exhibition { motion.tennis.challenge.start(playerName: motion.players.player?.nickname ?? "Guest", simulated: motion.activeInputSimulated, playerID: motion.players.player?.id, publicProfile: motion.players.player?.isPublic ?? false) }
                             } else { motion.tennis.start(demo: motion.activeInputSimulated) }
                         }
                         else { motion.tennis.pause() }

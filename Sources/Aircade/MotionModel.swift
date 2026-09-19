@@ -692,6 +692,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     /// Only the active game's assigned input can affect it. Sensor timestamps are
     /// kept stable between render ticks; polling a snapshot never freshens it.
     func routeGameInput() {
+        if selectedSport == .tennis && tennis.challengeSelected && tennis.challenge.exhibition { return }
         guard !showingLab, !showingMultiplayer, scriptedScenario == nil else { return }
         let device = controllers.soloDevice
         guard let sample = controllers.snapshot(for: device), sample.ready else {

@@ -114,7 +114,7 @@ final class TennisGame: ObservableObject {
     }
 
     func resume() {
-        if challengeSelected { if liveReady { challenge.resume() }; return }
+        if challengeSelected { if liveReady || challenge.exhibition { challenge.resume() }; return }
         guard state.phase == .paused, liveReady else { return }
         state.resume()
         lastTick = now
@@ -146,6 +146,7 @@ final class TennisGame: ObservableObject {
     }
 
     func invalidateInput(_ reason: String = "Controller tracking paused. Reconnect or recenter, then resume.") {
+        if challengeSelected && challenge.exhibition { return }
         inputReady = false
         previousPose = nil
         previousBall = nil
@@ -155,6 +156,7 @@ final class TennisGame: ObservableObject {
     }
 
     func waitForFreshInput() {
+        if challengeSelected && challenge.exhibition { return }
         inputReady = false
         previousPose = nil
         previousBall = nil

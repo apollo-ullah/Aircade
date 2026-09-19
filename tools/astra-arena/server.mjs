@@ -5,6 +5,9 @@ import {randomUUID} from 'node:crypto';
 import {chromium} from '../astra-probe/node_modules/playwright/index.mjs';
 import {apiKey,requestBody,tokenEstimate,root,model} from '../astra-probe/probe.mjs';
 
+import {gatewayKey,evaluateJev,jevModel} from './jev.mjs';
+const provider=process.env.AIRCADE_ARENA_PROVIDER==='jev'?'jev':'astra';
+const activeModel=provider==='jev'?jevModel:model;
 const token=process.env.AIRCADE_ARENA_TOKEN||randomUUID();
 const manual=process.env.AIRCADE_ARENA_MANUAL==='1';
 const html=await readFile(new URL('./index.html',import.meta.url));
@@ -14,6 +17,13 @@ let lastScreenshot=null,observationID=0,runCalls=0,runCost=0;
 let latest=null,commands=[],sequence=0,generation=0,stopped=false,browser,page,abort;
 let status={state:manual?'Manual controller':'Waiting for court',latencyMS:0,calls:0,cost:0,lastAction:'No action yet',rejected:0};
 const trace=[];
+function queueInput(input){
+ if(!latest?.meta.playing||input.run!==latest.meta.run||input.rally!==latest.meta.rally||!Number.isFinite(input.x)||!Number.isFinite(input.captured)||!Number.isInteger(input.frame)||input.frame>latest.meta.frame){status.rejected++;return false}
+ const command={run:input.run,rally:input.rally,frame:input.frame,sequence:++sequence,x:Math.max(-4.6,Math.min(4.6,input.x)),swing:input.swing===true,captured:input.captured};
+ if(!command.swing&&commands.at(-1)?.swing===false)commands.pop();
+ commands.push(command);if(commands.length>24)commands.shift();return true;
+}
+
 function authenticated(req){return req.headers.authorization===`Bearer ${token}`||req.headers.cookie?.split('; ').includes(`arena=${token}`)}
 async function body(req,limit){const chunks=[];let n=0;for await(const c of req){n+=c.length;if(n>limit)throw Error('Body too large');chunks.push(c)}return Buffer.concat(chunks)}
 function json(res,value,code=200){res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value))}
@@ -36,11 +46,7 @@ const server=createServer(async(req,res)=>{try{
  if(req.method==='GET'&&url.pathname==='/poll'){const batch=commands;commands=[];json(res,{commands:batch,status:{...status,observationID}});return}
  if(req.method==='POST'&&url.pathname==='/input'){
   const input=JSON.parse(await body(req,4096));
-  if(!latest?.meta.playing||input.run!==latest.meta.run||input.rally!==latest.meta.rally||!Number.isFinite(input.x)||!Number.isFinite(input.captured)||input.frame>latest.meta.frame){status.rejected++;json(res,{accepted:false});return}
-  const command={run:input.run,rally:input.rally,frame:input.frame,sequence:++sequence,x:Math.max(-4.6,Math.min(4.6,input.x)),swing:input.swing===true,captured:input.captured};
-  // Preserve swings, coalesce pointer motion. Both manual and model use this same route.
-  if(!command.swing&&commands.at(-1)?.swing===false)commands.pop();
-  commands.push(command);if(commands.length>24)commands.shift();json(res,{accepted:true});return;
+  json(res,{accepted:queueInput(input)});return;
  }
  json(res,{error:'Not found'},404);
 }catch{json(res,{error:'Invalid arena request'},400)}});
@@ -95,10 +101,33 @@ async function loop(){
     source=await screenshot();outputs.push({type:'computer_call_output',call_id:call.call_id,output:{type:'computer_screenshot',image_url:`data:image/png;base64,${source.png.toString('base64')}`,detail:'original'}});
    }
    previous=result.id;next=requestBody(outputs,previous);
-   await writeFile(join(traceDir,'trace.json'),JSON.stringify({model,status,trace},null,2));
+   await writeFile(join(traceDir,'trace.json'),JSON.stringify({model:activeModel,status,trace},null,2));
   }
  }
 }
-async function close(){stopped=true;abort?.abort();await browser?.close();server.close();await writeFile(join(traceDir,'trace.json'),JSON.stringify({model,status,trace},null,2));process.exit(0)}
+async function close(){stopped=true;abort?.abort();await browser?.close();server.close();await writeFile(join(traceDir,'trace.json'),JSON.stringify({model:activeModel,status,trace},null,2));process.exit(0)}
 process.on('SIGTERM',close);process.on('SIGINT',close);
-if(!manual)loop().catch(e=>{status.state=`Unavailable: ${e.message}`});
+async function jevLoop(){
+ const key=await gatewayKey();if(!key){status.state='Unavailable: AI_GATEWAY_API_KEY missing';return}
+ let lastFrame=-1;
+ while(!stopped){
+  if(!latest?.meta.playing||!latest.meta.observation||latest.meta.frame===lastFrame){if(!latest?.meta.playing)status.state='Waiting for match';await pause(50);continue}
+  if(status.calls>=1000||status.cost>=5){status.state='Session budget reached';return}
+  if(runCalls>=300||runCost>=1.5){status.state='Match budget reached';await pause(100);continue}
+  const source=latest,epoch=generation;lastFrame=source.meta.frame;abort=new AbortController();
+  status.state='Thinking';const began=performance.now();status.calls++;runCalls++;
+  try{
+   const decision=await evaluateJev(key,source.meta.observation,AbortSignal.any([abort.signal,AbortSignal.timeout(6000)]));
+   status.cost+=decision.cost;runCost+=decision.cost;status.latencyMS=Math.round(performance.now()-began);
+   if(epoch!==generation||!latest?.meta.playing)continue;
+   const age=performance.now()-source.received;
+   const accepted=age<=6000&&queueInput({...source.meta,x:decision.x,swing:decision.swing});
+   status.state=accepted?'Playing':'Input late — missed deadline';
+   status.lastAction=`${decision.lane} (x=${decision.x}) · ${decision.swing?'SWING':'wait'} · ${Math.round(decision.probability*100)}% swing`;
+   trace.push({run:source.meta.run,rally:source.meta.rally,frame:source.meta.frame,observation:source.meta.observation,decision,latencyMS:status.latencyMS,ageMS:Math.round(age),accepted});
+   await writeFile(join(traceDir,'trace.json'),JSON.stringify({model:activeModel,status,trace},null,2));
+  }catch(e){if(epoch!==generation||stopped)continue;status.state=`Unavailable: ${e.name==='TimeoutError'?'Jev timed out':e.message}`;return}
+  await pause(Math.max(0,250-(performance.now()-began)));
+ }
+}
+if(!manual)(provider==='jev'?jevLoop():loop()).catch(e=>{status.state=`Unavailable: ${e.message}`});

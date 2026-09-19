@@ -56,3 +56,21 @@ AIRCADE_ASTRA_LIVE_TEST=1 swift test --filter AIChallengeIntegrationTests
 The live test reports to `.local/astra-arena-rehearsal/report.json`, fails below
 three returns, and remains skipped during ordinary tests. Physical AirPod acceptance
 is a separate requirement. A passing small trial is not proof of general tennis skill.
+
+## Jev and exhibition
+
+The app's provider selection launches the same sidecar with
+`AIRCADE_ARENA_PROVIDER=jev`. Jev uses Vercel's native evaluation HTTP API and
+`AI_GATEWAY_API_KEY` from ignored `.env`; no extra npm dependency is needed.
+It receives only recent measured state and returns bounded lane/swing decisions.
+Jev limits: 300 calls/$1.50 per match and 1,000 calls/$5 per arena; one call in flight.
+Vercel may require billing verification even with a valid key.
+
+**Watch Astra vs Jev** starts a distinct sidecar for each racket. Near-side
+observations and poses are mirrored into the same local court coordinates.
+Results are exhibitions and cannot rank. Only the explicit Start button begins calls.
+Human challenge scores persist locally, keyed by provider/model/control/rules/speed;
+the shared station Tennis leaderboard remains separate.
+
+See `docs/AI-CHALLENGE-PHASE456.md` for the current live-verification blocker,
+testing commands, and judging rehearsal.

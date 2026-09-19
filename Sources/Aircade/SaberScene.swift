@@ -23,6 +23,7 @@ final class SaberScene {
     private let tennisBall = SCNNode()
     private var controlledRacket: SCNNode?
     private var observationView: SCNView?
+    private var nearObservationView: SCNView?
     private let tennisOpponent = SCNNode()
     private let opponentSwingArm = SCNNode()
     private let opponentBody = SCNNode()
@@ -549,6 +550,7 @@ final class SaberScene {
         }
     }
     func syncChallenge(_ match: AIChallengeMatch) {
+        if match.exhibition { pivot.simdPosition = match.nearPose.position; pivot.simdOrientation = match.nearPose.orientation }
         syncTennis(ball: match.ball, elapsed: match.elapsed, controlled: true)
         tennisOpponent.removeAllActions(); opponentBody.removeAllActions()
         opponentSwingArm.isHidden = true
@@ -567,18 +569,18 @@ final class SaberScene {
     }
 
     /// Dedicated camera behind the AI baseline. Screen-left is world +X.
-    func challengeJPEG() -> Data? {
-        if observationView == nil {
+    func challengeJPEG(near: Bool = false) -> Data? {
+        if (near ? nearObservationView : observationView) == nil {
             let view = SCNView(frame: NSRect(x: 0, y: 0, width: 1024, height: 510))
             let camera = SCNNode(); camera.camera = SCNCamera()
             camera.camera?.usesOrthographicProjection = true; camera.camera?.orthographicScale = 12.8
-            camera.position = SCNVector3(0, 13, -27)
+            camera.position = SCNVector3(0, 13, near ? 9 : -27)
             camera.look(at: SCNVector3(0, -0.5, -9))
             view.scene = scene; view.pointOfView = camera
             view.antialiasingMode = .none
-            observationView = view
+            if near { nearObservationView = view } else { observationView = view }
         }
-        guard let image = observationView?.snapshot().tiffRepresentation,
+        guard let image = (near ? nearObservationView : observationView)?.snapshot().tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: image) else { return nil }
         return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7])
     }

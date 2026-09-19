@@ -55,6 +55,13 @@ public struct AIChallengeMatch {
     public private(set) var humanReturns = 0
     public private(set) var ball: TennisBallFlight?
     public private(set) var controller = TennisOpponentController()
+    public private(set) var nearController = TennisOpponentController()
+    public private(set) var exhibition = false
+    private var nearLastSequence = -1
+    public var nearPose: SaberPose {
+        let p = nearController.pose
+        return SaberPose(position: SIMD3<Float>(-p.position.x, p.position.y, -18 - p.position.z), orientation: simd_quatf(angle: .pi, axis: SIMD3<Float>(0, 1, 0)) * p.orientation)
+    }
     public private(set) var lastSequence = -1
     private var nextServe = 0.5
     private var flightID = 0
@@ -62,25 +69,34 @@ public struct AIChallengeMatch {
     public var remaining: Double { max(0, Self.duration - elapsed) }
     public var winner: String { humanPoints == aiPoints ? "Draw" : humanPoints > aiPoints ? "You win!" : "Astra wins!" }
     public init() {}
-    public mutating func start(seed: Int = 0) { self = Self(); serveSeed = abs(seed % 3); phase = .playing }
-    public mutating func pause() { if phase == .playing { phase = .paused; controller.release() } }
+    public mutating func start(seed: Int = 0, exhibition: Bool = false) { self = Self(); serveSeed = abs(seed % 3); self.exhibition = exhibition; phase = .playing }
+    public mutating func pause() { if phase == .playing { phase = .paused; controller.release(); nearController.release() } }
     public mutating func resume() { if phase == .paused { phase = .playing } }
-    public mutating func stop() { phase = .menu; ball = nil; controller.release() }
-    public mutating func apply(_ command: TennisControlCommand, observationAge: Double) -> Bool {
+    public mutating func stop() { phase = .menu; ball = nil; controller.release(); nearController.release() }
+    public mutating func apply(_ command: TennisControlCommand, observationAge: Double, near: Bool = false) -> Bool {
         guard phase == .playing, command.run == run, command.rally == rally,
-              command.sequence > lastSequence, command.frame >= 0, command.x.isFinite,
+              command.sequence > (near ? nearLastSequence : lastSequence), (!near || exhibition), command.frame >= 0, command.x.isFinite,
               observationAge.isFinite, observationAge >= 0, observationAge <= 6 else { return false }
-        lastSequence = command.sequence
-        controller.input(x: command.x, swing: command.swing)
+        if near { nearLastSequence = command.sequence; nearController.input(x: command.x, swing: command.swing) }
+        else { lastSequence = command.sequence; controller.input(x: command.x, swing: command.swing) }
         return true
     }
     public mutating func advance(_ dt: Double) -> RacketContact? {
         guard phase == .playing, dt.isFinite, dt > 0, dt <= 0.1 else { return nil }
         let oldTime = elapsed, previous = controller.pose, wasSwinging = controller.swinging
+        let previousNear = nearPose, nearSwinging = nearController.swinging
+        if exhibition { nearController.advance(dt) }
         elapsed = min(Self.duration, elapsed + dt)
         controller.advance(dt)
-        if elapsed >= Self.duration { phase = .results; ball = nil; controller.release(); return nil }
+        if elapsed >= Self.duration { phase = .results; ball = nil; controller.release(); nearController.release(); return nil }
         if let flight = ball {
+            if exhibition, flight.direction == .towardPlayer, nearSwinging,
+               let contact = RacketGeometry.sweep(from: previousNear, to: nearPose, dt: dt,
+                   ballFrom: flight.position(at: oldTime), ballTo: flight.position(at: elapsed)), contact.swingSpeed >= 0.75 {
+                humanReturns += 1
+                launch(from: contact.point, x: max(-0.9, min(0.9, contact.velocity.x * 0.25)), direction: .towardOpponent)
+                return contact
+            }
             if flight.direction == .towardOpponent, wasSwinging,
                let contact = RacketGeometry.sweep(from: previous, to: controller.pose, dt: dt,
                    ballFrom: flight.position(at: oldTime), ballTo: flight.position(at: elapsed)), contact.swingSpeed >= 0.75 {
@@ -92,7 +108,7 @@ public struct AIChallengeMatch {
             if elapsed > flight.arrival + 0.45 {
                 if flight.direction == .towardPlayer { aiPoints += 1 } else { humanPoints += 1 }
                 rally += 1; ball = nil; nextServe = elapsed + 1
-                controller.release()
+                controller.release(); nearController.release()
             }
         } else if elapsed >= nextServe {
             let toAI = rally % 2 == 0
@@ -104,7 +120,7 @@ public struct AIChallengeMatch {
     }
     public mutating func humanContact(from previous: SaberPose, to current: SaberPose, dt: Double,
                                        ballFrom: SIMD3<Float>, flightID: Int) -> RacketContact? {
-        guard phase == .playing, let flight = ball, flight.id == flightID, flight.direction == .towardPlayer,
+        guard !exhibition, phase == .playing, let flight = ball, flight.id == flightID, flight.direction == .towardPlayer,
               let contact = RacketGeometry.sweep(from: previous, to: current, dt: dt, ballFrom: ballFrom, ballTo: flight.position(at: elapsed)),
               let shot = TennisShotResponse.make(contact: contact) else { return nil }
         humanReturns += 1

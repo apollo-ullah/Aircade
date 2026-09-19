@@ -117,10 +117,10 @@ struct TennisView: View {
                         Text(standing.challenge).font(.callout).padding(16).frame(width: 300, alignment: .leading).wiiPanel()
                     }
                     VStack(alignment: .leading, spacing: 10) {
-                        Label("ASTRA · SCREEN CONTROL", systemImage: "eye").font(.caption.bold())
-                        Text("Can you beat Astra?").font(.title2.bold())
-                        Text("It watches the court and operates its racket. Experimental: 8-second flights.").font(.callout).foregroundStyle(.secondary)
-                        MotionButton("Challenge Astra") { game.challengeSelected = true; game.challenge.connect() }.buttonStyle(WiiButtonStyle(primary: true))
+                        Label("AI CHALLENGERS", systemImage: "eye").font(.caption.bold())
+                        Text("Choose your rival").font(.title2.bold())
+                        Text("Astra watches. Jev evaluates. Try a challenge or watch them play each other.").font(.callout).foregroundStyle(.secondary)
+                        MotionButton("AI challenge") { game.challengeSelected = true; game.challenge.connect() }.buttonStyle(WiiButtonStyle(primary: true))
                     }.padding(20).frame(width: 300).wiiPanel()
                     Spacer()
                     VStack(alignment: .leading, spacing: 12) {

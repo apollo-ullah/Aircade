@@ -65,6 +65,26 @@ final class AIChallengeTests: XCTestCase {
         XCTAssertEqual(m.humanReturns, 1)
     }
 
+    func testExhibitionUsesIndependentSequencesAndMirroredRealContact() {
+        var m = AIChallengeMatch(); m.start(exhibition: true)
+        XCTAssertTrue(m.apply(command(m, x: 2), observationAge: 0))
+        XCTAssertTrue(m.apply(command(m, x: -2), observationAge: 0, near: true))
+        XCTAssertEqual(m.controller.target, 2); XCTAssertEqual(m.nearController.target, -2)
+        // Let the first far-side ball miss; the next neutral serve approaches the near racket.
+        while m.ball?.direction != .towardPlayer { _ = m.advance(1.0 / 60) }
+        let arrival = m.ball!.arrival
+        var sent = false
+        while m.elapsed < arrival + 0.45 {
+            if !sent && m.elapsed > arrival - 1.8 {
+                XCTAssertTrue(m.apply(command(m, x: 0, swing: true, sequence: 2), observationAge: 0, near: true)); sent = true
+            }
+            _ = m.advance(1.0 / 60)
+        }
+        XCTAssertEqual(m.humanReturns, 1)
+        XCTAssertEqual(m.ball?.direction, .towardOpponent)
+        m.pause(); XCTAssertFalse(m.nearController.swinging); XCTAssertFalse(m.controller.swinging)
+    }
+
     func testResultsAndPauseClock() {
         var m = AIChallengeMatch(); m.start(); m.pause()
         _ = m.advance(0.1); XCTAssertEqual(m.elapsed, 0)
