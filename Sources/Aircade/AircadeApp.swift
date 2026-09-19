@@ -137,7 +137,7 @@ struct ContentView: View {
         Group {
             if motion.showingMultiplayer { MultiplayerView(motion: motion, duel: motion.multiplayer) }
             else if motion.showingLab { ArenaLayout(motion: motion, arena: motion.arena, camera: motion.camera) }
-            else { NeonRushView(motion: motion, game: motion.game) }
+            else { NeonRushView(motion: motion, game: motion.game, players: motion.players) }
         }
     }
 }

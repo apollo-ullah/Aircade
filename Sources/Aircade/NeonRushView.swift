@@ -7,6 +7,8 @@ private let rushCream = SportsTheme.ink
 struct NeonRushView: View {
     @ObservedObject var motion: MotionModel
     @ObservedObject var game: ArcadeGame
+    @ObservedObject var players: PlayerSession
+    @State private var restoreCamera = false
     @State private var showingSetup = false
     @State private var showHowTo = false
     @State private var showingScripts = false
@@ -35,6 +37,17 @@ struct NeonRushView: View {
         }
         .foregroundStyle(rushCream)
         .background(SportsTheme.paper).tint(rushLime)
+        .sheet(isPresented: $players.showingSignIn, onDismiss: {
+            if restoreCamera && motion.useCamera { motion.startCamera() }
+            restoreCamera = false
+        }) { BadgeSignInView(players: players) }
+        .onChange(of: players.showingSignIn) {
+            if players.showingSignIn {
+                game.pause("Player sign-in is open.")
+                restoreCamera = motion.camera.running
+                motion.camera.stop()
+            }
+        }
         .sheet(isPresented: $showingSetup) {
             ControllerSetupView(motion: motion, done: { showingSetup = false })
         }
@@ -57,6 +70,14 @@ struct NeonRushView: View {
                 Rectangle().fill(SportsTheme.blue.opacity(0.25)).frame(width: 1, height: 30)
                 Text("Motion sports, in your hands.").font(.system(size: 14, weight: .medium, design: .default)).foregroundStyle(.secondary)
                 Spacer()
+                if let player = players.player {
+                    Button { players.showingSignIn = true } label: { Label(player.nickname, systemImage: "person.crop.circle.fill") }
+                        .buttonStyle(SportsButtonStyle())
+                    Button("Log out") { players.logout() }.buttonStyle(SportsButtonStyle())
+                } else {
+                    Button("Scan badge") { players.showingSignIn = true }.buttonStyle(SportsButtonStyle())
+                }
+                Button { NSWorkspace.shared.open(players.leaderboardURL) } label: { Image(systemName: "trophy") }.help("Open leaderboard")
                 connectionPill
                 Button { motion.showMultiplayer(true) } label: { Label("Saber Duel · 2 players", systemImage: "person.2.fill") }
                     .buttonStyle(SportsButtonStyle(primary: true))
@@ -101,12 +122,13 @@ struct NeonRushView: View {
                         }
                     }
                     Button {
-                        if game.inputReady { game.start(demo: motion.simulated) }
+                        if players.player == nil && !motion.simulated { players.showingSignIn = true }
+                        else if game.inputReady { game.start(demo: motion.simulated) }
                         else { showingSetup = true }
                     } label: {
                         HStack {
                             Image(systemName: "play.circle.fill").font(.title2)
-                            Text(game.inputReady ? "Let’s play!" : "Connect your controller")
+                            Text(players.player == nil && !motion.simulated ? "Scan badge to play" : game.inputReady ? "Let’s play!" : "Connect your controller")
                             Spacer()
                             Image(systemName: "chevron.right")
                         }.font(.system(size: 18, weight: .bold, design: .default)).padding(.vertical, 6)
@@ -120,11 +142,14 @@ struct NeonRushView: View {
                     }.buttonStyle(.plain).font(.system(size: 13, weight: .medium, design: .default)).foregroundStyle(rushLime)
                 }.padding(24).frame(width: 430).sportsPanel()
                 VStack(alignment: .trailing, spacing: 16) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "trophy.fill").foregroundStyle(Color.orange)
-                        Text("Personal best")
-                        Text(game.bestScore.formatted()).fontWeight(.bold).foregroundStyle(rushLime)
-                    }.font(.system(size: 14, design: .default)).padding(14).sportsPanel()
+                    if let player = players.player { playerScores(player) }
+                    else {
+                        HStack(spacing: 8) {
+                            Image(systemName: "trophy.fill").foregroundStyle(Color.orange)
+                            Text("Station best")
+                            Text(game.bestScore.formatted()).fontWeight(.bold).foregroundStyle(rushLime)
+                        }.font(.system(size: 14, design: .default)).padding(14).sportsPanel()
+                    }
                     Spacer()
                     if showHowTo { howToCard }
                     else {
@@ -151,6 +176,26 @@ struct NeonRushView: View {
                 .background(.white.opacity(0.96))
         }
     }
+    private func playerScores(_ player: BadgePlayer) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 8) {
+                Image(systemName: "person.crop.circle.fill").foregroundStyle(rushLime)
+                Text(player.nickname).fontWeight(.semibold).lineLimit(1)
+            }
+            Text("YOUR HIGH SCORES").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(.secondary)
+            HStack(spacing: 30) {
+                scoreLabel("Arcade", players.bests["Arcade"])
+                scoreLabel("Chill", players.bests["Chill"])
+            }
+            Text("Saved to your badge profile").font(.caption).foregroundStyle(.secondary)
+        }.font(.system(size: 14, design: .default)).padding(16).frame(width: 300, alignment: .leading).sportsPanel()
+    }
+    private func scoreLabel(_ difficulty: String, _ score: Int?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(difficulty.uppercased()).font(.caption2.bold()).foregroundStyle(.secondary)
+            Text(score.map { $0.formatted() } ?? "—").font(.title3.bold()).monospacedDigit().foregroundStyle(rushLime)
+        }
+    }
     private var howToCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("FIND YOUR FLOW").font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundStyle(rushLime)
@@ -162,7 +207,7 @@ struct NeonRushView: View {
     private var hud: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("SCORE").font(.system(size: 12, weight: .semibold)).tracking(1)
+                Text(game.isDemo ? "DEMO SCORE" : "\(players.player?.nickname ?? "Player") · SCORE").font(.system(size: 12, weight: .semibold)).lineLimit(1)
                 HStack(alignment: .firstTextBaseline, spacing: 18) {
                     Text(game.state.score.formatted()).font(.system(size: 38, weight: .semibold)).monospacedDigit()
                     Text("×\(game.state.multiplier)").font(.system(size: 24, weight: .bold)).foregroundStyle(Color(red: 0.55, green: 0.88, blue: 1))
@@ -237,7 +282,7 @@ struct NeonRushView: View {
                 Text(game.state.completed ? game.state.rank : "↻").font(.system(size: 90, weight: .bold, design: .default)).italic().foregroundStyle(rushLime)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(game.state.score.formatted()).font(.system(size: 54, weight: .bold, design: .default)).monospacedDigit()
-                    Text(game.newRecord ? "NEW PERSONAL BEST" : game.isDemo ? (motion.scriptedScenario == nil ? "DEMO RUN · SCORE NOT SAVED" : "SCRIPTED RUN · SCORE NOT SAVED") : "\(game.state.difficulty.rawValue.uppercased()) · BEST \(game.bestScore.formatted())")
+                    Text(resultScoreCaption)
                         .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(game.newRecord ? rushLime : .secondary)
                 }
             }
@@ -248,13 +293,25 @@ struct NeonRushView: View {
             }.padding(.vertical, 6)
             Text(game.state.completed ? "You found your flow. Can you beat it?" : "Keep your cuts deliberate. The next run is yours.")
                 .font(.callout).foregroundStyle(.secondary)
+            Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.simulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
                 Button("Back to Aircade") { game.leave() }
+                Button("Next player") { game.leave(); players.nextPlayer() }
+                Button("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL) }
                 if motion.scriptedScenario != nil { Button("Change scripted test") { showingScripts = true } }
                 if !game.inputReady { Button("Connect controller") { showingSetup = true } }
             }.buttonStyle(.plain).foregroundStyle(.secondary).font(.callout)
         }
+    }
+    private var resultScoreCaption: String {
+        if game.isDemo {
+            return motion.scriptedScenario == nil ? "DEMO RUN · SCORE NOT SAVED" : "SCRIPTED RUN · SCORE NOT SAVED"
+        }
+        if let best = players.bests[game.state.difficulty.rawValue] {
+            return "\(game.state.difficulty.rawValue.uppercased()) · YOUR BEST \(best.formatted())"
+        }
+        return "\(game.state.difficulty.rawValue.uppercased()) · SAVING TO YOUR PROFILE"
     }
     private func overlayCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ZStack {

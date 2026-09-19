@@ -28,6 +28,9 @@ final class ArcadeGame: ObservableObject {
     private var lastInput = 0.0
     private var feedbackUntil = 0.0
     private var resultSaved = false
+    var authorizeRun: (() -> Bool)?
+    var onRunStarted: ((Bool) -> Void)?
+    var onRunFinished: ((NeonRush, Bool) -> Void)?
     var onEvent: ((String) -> Void)?
     var onJudgment: ((RushJudgment) -> Void)?
     var pollInput: (() -> Void)?
@@ -57,7 +60,10 @@ final class ArcadeGame: ObservableObject {
 
     func refreshBest() { bestScore = scoreDefaults.integer(forKey: "neonRush.best.\(difficulty.rawValue)") }
     func start(demo: Bool, seed: UInt64? = nil) {
-        guard enabled, liveReady else { return }
+        guard enabled else { return }
+        if !demo, let authorizeRun, !authorizeRun() { return }
+        guard liveReady else { return }
+        onRunStarted?(demo)
         maxFeedbackSeconds = 0; slowFrames = 0; maxFrameSeconds = 0
         recoveringInput = false; transientInputGaps = 0
         isDemo = demo; resultSaved = false; newRecord = false
@@ -195,6 +201,7 @@ final class ArcadeGame: ObservableObject {
     private func finish() {
         guard !resultSaved else { return }
         resultSaved = true
+        onRunFinished?(state, isDemo)
         if !isDemo && state.score > bestScore {
             bestScore = state.score; newRecord = true
             scoreDefaults.set(bestScore, forKey: "neonRush.best.\(difficulty.rawValue)")

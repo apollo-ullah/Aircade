@@ -77,6 +77,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     @Published var showingLab = false
     @Published var showingMultiplayer = false
     lazy var multiplayer = MultiplayerModel(motion: self)
+    let players = PlayerSession()
     let camera = HandTracker()
     let scene = SaberScene()
     lazy var arena = TrainingArena(scene: scene)
@@ -129,6 +130,9 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         logDirectory = customLogDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Aircade/Logs", isDirectory: true)
         super.init()
+        game.authorizeRun = { [weak self] in self?.players.authorize() ?? false }
+        game.onRunStarted = { [weak self] demo in self?.players.beginRun(demo: demo) }
+        game.onRunFinished = { [weak self] state, demo in self?.players.finishRun(state, demo: demo) }
         arena.enabled = false
         scene.setArcadeVisible(true)
         game.onEvent = { [weak self] message in self?.event(message) }

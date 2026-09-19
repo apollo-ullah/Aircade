@@ -5,3 +5,5 @@ build/
 .swiftpm/
 DerivedData/
 xcuserdata/
+.local/
+server/node_modules/

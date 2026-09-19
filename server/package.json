@@ -1,0 +1,1 @@
+{"name":"aircade-station","private":true,"version":"1.0.0","type":"module","scripts":{"start":"node server.mjs","test":"node --test test.mjs","seed":"node seed.mjs","unseed":"node seed.mjs --remove"},"dependencies":{"express":"^4.21.2","mongodb":"^6.15.0"}}
