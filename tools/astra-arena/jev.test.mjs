@@ -13,3 +13,14 @@ test('Gateway errors are surfaced without returning a fallback decision or secre
  const original=globalThis.fetch;
  try{globalThis.fetch=async()=>new Response('sensitive-provider-body',{status:401});await assert.rejects(()=>evaluateJev('secret',{},AbortSignal.timeout(1000)),/^Error: Jev Gateway HTTP 401$/)}finally{globalThis.fetch=original}
 });
+test('Rate limits preserve Retry-After without exposing the provider response',async()=>{
+ const original=globalThis.fetch;
+ try{
+  for(const [header,expected] of [['3',3000],[null,1000],['invalid',1000]]){
+   globalThis.fetch=async()=>new Response('sensitive-provider-body',{status:429,headers:header===null?{}:{'Retry-After':header}});
+   await assert.rejects(()=>evaluateJev('secret',{},AbortSignal.timeout(1000)),error=>{
+    assert.equal(error.message,'Jev Gateway HTTP 429');assert.equal(error.retryable,true);assert.equal(error.retryAfterMS,expected);return true;
+   });
+  }
+ }finally{globalThis.fetch=original}
+});

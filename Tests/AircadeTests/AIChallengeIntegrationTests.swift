@@ -42,6 +42,7 @@ final class AIChallengeIntegrationTests: XCTestCase {
                             "misses":game.match.humanPoints,"status":game.status,"action":game.lastAction,
                             "captureMS":game.captureMS,"latencyMS":game.latencyMS])
             game.pause("Between rehearsal trials")
+            if game.status.hasPrefix("Unavailable:") { break }
         }
         try JSONSerialization.data(withJSONObject: ["hardwareVerified":false,"trials":reports], options: [.prettyPrinted,.sortedKeys]).write(to: output.appendingPathComponent("report.json"))
         XCTAssertGreaterThanOrEqual(reports.reduce(0) { $0 + ($1["returns"] as? Int ?? 0) }, 3, "Experimental usability gate: three returns out of ten")
@@ -70,6 +71,8 @@ final class AIChallengeIntegrationTests: XCTestCase {
         let report: [String: Any] = ["humanController":false,"phase":game.match.phase.rawValue,"astraPoints":game.match.aiPoints,"jevPoints":game.match.humanPoints,
             "astraReturns":game.match.aiReturns,"jevReturns":game.match.humanReturns,"astraStatus":game.status,"jevStatus":game.partner?.status ?? "missing"]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted,.sortedKeys]).write(to: root.appendingPathComponent(".local/ai-exhibition-report.json"))
+        XCTAssertGreaterThan(game.match.aiReturns, 0, "Astra must make a real return for exhibition acceptance")
+        XCTAssertGreaterThan(game.match.humanReturns, 0, "Jev must make a real return for exhibition acceptance")
     }
 
 }

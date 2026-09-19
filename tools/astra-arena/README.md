@@ -64,6 +64,9 @@ The app's provider selection launches the same sidecar with
 `AI_GATEWAY_API_KEY` from ignored `.env`; no extra npm dependency is needed.
 It receives only recent measured state and returns bounded lane/swing decisions.
 Jev limits: 300 calls/$1.50 per match and 1,000 calls/$5 per arena; one call in flight.
+Requests are spaced at least 2.2 seconds apart, including across rallies, to stay
+below the observed 30-request/minute Gateway limit. HTTP 429 honors Retry-After,
+then evaluates the newest observation; it never replays a stale swing.
 Vercel may require billing verification even with a valid key.
 
 **Watch Astra vs Jev** starts a distinct sidecar for each racket. Near-side
@@ -72,5 +75,5 @@ Results are exhibitions and cannot rank. Only the explicit Start button begins c
 Human challenge scores persist locally, keyed by provider/model/control/rules/speed;
 the shared station Tennis leaderboard remains separate.
 
-See `docs/AI-CHALLENGE-PHASE456.md` for the current live-verification blocker,
+See `docs/AI-CHALLENGE-PHASE456.md` for the live-verification evidence,
 testing commands, and judging rehearsal.

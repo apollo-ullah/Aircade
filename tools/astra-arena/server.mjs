@@ -54,7 +54,7 @@ await new Promise((yes,no)=>{server.once('error',no);server.listen(0,'127.0.0.1'
 const url=`http://127.0.0.1:${server.address().port}`;
 console.log(JSON.stringify({url,token,manualURL:`${url}/?token=${token}`}));
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
-const instruction=`You play real live tennis using a browser controller. You see only the rendered court. Your racket is closest to the camera; your opponent is far away. The yellow ball travels for 8 seconds per flight, bouncing before reaching you. Move horizontally along the rail at y=604, x=420..604 to align your racket with the approaching ball. The view is from YOUR baseline: screen-left means left along the rail. The rail is horizontally aligned with the court: move to the same screen x as the ball, anticipating its lateral travel. Each decision takes about 3 seconds. Account for that delay. When the ball is approaching or passing the net, move and click SWING in the SAME batch so your three-second stroke is underway as it reaches you. Click SWING at (942,667) when the ball is approaching your baseline; the stroke moves forward for 3 seconds, then resets. The racket must physically intersect the ball during the stroke. Clicking too early or late misses. You may move the rail then click swing in the same action batch. Never assume a hit. Observe and keep playing continuously until the match ends. Only move, left click, screenshot and wait are supported. The court image itself has no controls. You can act only in the rail or the swing button. Be quick; the simulation continues while you think.`;
+const instruction=`You play real live tennis using a browser controller. You see only the rendered court. The attached image is the current browser screenshot; use it directly for your first action rather than requesting a redundant screenshot. Your racket is closest to the camera; your opponent is far away. The yellow ball travels for 8 seconds per flight, bouncing before reaching you. Move horizontally along the rail at y=604, x=420..604 to align your racket with the approaching ball. The view is from YOUR baseline: screen-left means left along the rail. The rail is horizontally aligned with the court: move to the same screen x as the ball, anticipating its lateral travel. Each decision takes about 3 seconds. Account for that delay. When the ball is approaching or passing the net, move and click SWING in the SAME batch so your three-second stroke is underway as it reaches you. Click SWING at (942,667) when the ball is approaching your baseline; the stroke moves forward for 3 seconds, then resets. The racket must physically intersect the ball during the stroke. Clicking too early or late misses. You may move the rail then click swing in the same action batch. Never assume a hit. Observe and keep playing continuously until the match ends. Only move, left click, screenshot and wait are supported. The court image itself has no controls. You can act only in the rail or the swing button. Be quick; the simulation continues while you think.`;
 async function screenshot(){const frame=latest;await page.evaluate(async f=>{window.arena.freeze(true);await window.arena.show(f)},frame);const png=await page.screenshot();return{frame,png}}
 async function loop(){
  const key=await apiKey();if(!key){status.state='Unavailable: OpenAI key missing';return}
@@ -109,15 +109,17 @@ async function close(){stopped=true;abort?.abort();await browser?.close();server
 process.on('SIGTERM',close);process.on('SIGINT',close);
 async function jevLoop(){
  const key=await gatewayKey();if(!key){status.state='Unavailable: AI_GATEWAY_API_KEY missing';return}
- let lastFrame=-1;
+ let lastFrame=-1,rateLimitCount=0,nextRequestAt=0;
  while(!stopped){
   if(!latest?.meta.playing||!latest.meta.observation||latest.meta.frame===lastFrame){if(!latest?.meta.playing)status.state='Waiting for match';await pause(50);continue}
+  if(performance.now()<nextRequestAt){await pause(Math.min(100,nextRequestAt-performance.now()));continue}
   if(status.calls>=1000||status.cost>=5){status.state='Session budget reached';return}
   if(runCalls>=300||runCost>=1.5){status.state='Match budget reached';await pause(100);continue}
   const source=latest,epoch=generation;lastFrame=source.meta.frame;abort=new AbortController();
-  status.state='Thinking';const began=performance.now();status.calls++;runCalls++;
+  status.state='Thinking';const began=performance.now();nextRequestAt=began+2200;status.calls++;runCalls++;
   try{
    const decision=await evaluateJev(key,source.meta.observation,AbortSignal.any([abort.signal,AbortSignal.timeout(6000)]));
+   rateLimitCount=0;
    status.cost+=decision.cost;runCost+=decision.cost;status.latencyMS=Math.round(performance.now()-began);
    if(epoch!==generation||!latest?.meta.playing)continue;
    const age=performance.now()-source.received;
@@ -126,8 +128,26 @@ async function jevLoop(){
    status.lastAction=`${decision.lane} (x=${decision.x}) · ${decision.swing?'SWING':'wait'} · ${Math.round(decision.probability*100)}% swing`;
    trace.push({run:source.meta.run,rally:source.meta.rally,frame:source.meta.frame,observation:source.meta.observation,decision,latencyMS:status.latencyMS,ageMS:Math.round(age),accepted});
    await writeFile(join(traceDir,'trace.json'),JSON.stringify({model:activeModel,status,trace},null,2));
-  }catch(e){if(epoch!==generation||stopped)continue;status.state=`Unavailable: ${e.name==='TimeoutError'?'Jev timed out':e.message}`;return}
-  await pause(Math.max(0,250-(performance.now()-began)));
+  }catch(e){
+   if(epoch!==generation||stopped)continue;
+   if(e.name==='TimeoutError'){
+    status.state='Jev timed out — retrying fresh observation';
+    trace.push({run:source.meta.run,rally:source.meta.rally,timedOut:true});
+    await writeFile(join(traceDir,'trace.json'),JSON.stringify({model:activeModel,status,trace},null,2));
+    continue;
+   }
+   if(e.retryable){
+    rateLimitCount++;
+    const delay=Math.max(e.retryAfterMS||1000,Math.min(8000,1000*2**Math.min(rateLimitCount-1,3)));
+    status.state='Jev rate limited — waiting to retry';
+    trace.push({run:source.meta.run,rally:source.meta.rally,rateLimited:true,retryAfterMS:delay});
+    await writeFile(join(traceDir,'trace.json'),JSON.stringify({model:activeModel,status,trace},null,2));
+    await pause(delay);
+    continue; // Read the newest observation; never replay the rejected request.
+   }
+   status.state=`Unavailable: ${e.name==='TimeoutError'?'Jev timed out':e.message}`;return;
+  }
+
  }
 }
 if(!manual)(provider==='jev'?jevLoop():loop()).catch(e=>{status.state=`Unavailable: ${e.message}`});
