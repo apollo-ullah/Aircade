@@ -1,15 +1,28 @@
 import SwiftUI
+import simd
 
 struct CalibrationSheet: View {
     @ObservedObject var motion: MotionModel
     var body: some View {
+        if motion.useSimpleCalibration {
+            SimpleCalibrationSheet(motion: motion)
+        } else {
+        // Newer five-step guide is intentionally bypassed for the simple build.
         CalibrationGuidePanel(
-            step: motion.calibrationStep,
-            status: motion.sampleAge < 0.25 ? motion.calibrationMessage : "Waiting for fresh AirPod motion…",
-            isLive: motion.running && !motion.simulated && motion.sampleAge < 0.25,
-            capture: { motion.captureGripPose() },
-            cancel: { motion.cancelGripCalibration() }
+            step: motion.calibrationStep, status: motion.calibrationMessage,
+            isLive: motion.hasFreshMotion && !motion.simulated,
+            activeSource: motion.source, tiltDegrees: motion.calibrationTiltDegrees,
+            poseHint: motion.calibrationPoseHint, poseReady: motion.calibrationPoseReady,
+            errorMessage: motion.calibrationError, feedbackID: motion.calibrationAttempt,
+            rotationSpeed: motion.speed, liveOrientation: motion.calibrationPreview,
+            sourceWarning: motion.sourceMismatch ? motion.controllerLabel : nil,
+            adoptSourceTitle: motion.canAdoptIncomingSource ? "Use \(motion.incomingSource) instead & restart" : nil,
+            capture: { motion.captureGripPose() }, cancel: { motion.cancelGripCalibration() },
+            restart: { motion.beginGripCalibration() },
+            useSaved: motion.hasGripCalibration && motion.hasFreshMotion ? { motion.useSavedGrip() } : nil,
+            adoptSource: { motion.adoptIncomingSource() }
         )
+        }
     }
 }
 
@@ -17,21 +30,52 @@ struct CalibrationGuidePanel: View {
     let step: Int
     let status: String
     let isLive: Bool
+    var activeSource = ""
+    var tiltDegrees: Float? = nil
+    var poseHint = ""
+    var poseReady = false
+    var errorMessage = ""
+    var feedbackID = 0
     var previewTime: Double? = nil
+    var rotationSpeed = 0.0
+    var liveOrientation: simd_quatf? = nil
+    var sourceWarning: String? = nil
+    var adoptSourceTitle: String? = nil
     var capture: () -> Void = {}
     var cancel: () -> Void = {}
+    var restart: (() -> Void)? = nil
+    var useSaved: (() -> Void)? = nil
+    var adoptSource: () -> Void = {}
     @State private var animationStart = Date()
     private let cyan = Color(red: 0.35, green: 0.93, blue: 0.91)
+    private var labels: [String] { ["Start", "Left", "Return", "Forward", "Test"] }
+    private var illustrationStep: Int { step == 2 ? 2 : step == 4 ? 3 : 1 }
     private var title: String {
-        step == 1 ? "Hold your hand upright" : step == 2 ? "Tip the top toward YOUR LEFT" : "Tip the top toward your screen"
+        switch step {
+        case 1: return "Check your earbud. Hold upright."
+        case 2: return "Lean your handle to YOUR LEFT"
+        case 3: return "Return to your starting angle"
+        case 4: return "Lean your handle toward the screen"
+        default: return "Try your blade before saving"
+        }
     }
     private var instruction: String {
-        step == 1 ? "Pinch the AirPod comfortably. Keep that same pinch for all three poses." :
-        step == 2 ? "Keep your wrist in place. Lean the top left, like the animation, then hold it there." :
-        "First return upright. Then lean the top away from your chest, toward your Mac, and hold."
+        switch step {
+        case 1: return "Hold the \(activeSource) AirPod. Move only that earbud: the live speed below should react. Then hold your imaginary handle upright and still."
+        case 2: return "Keep the same grip and tip the top left, roughly 30°. Moving your wrist, forearm or elbow is fine. Then hold still."
+        case 3: return "Bring the earbud back to the angle you saved in step 1. The live angle below should return near 0°. Keep the same grip."
+        case 4: return "From upright, tip the top away from your chest, toward your Mac, roughly 30°. Then hold still."
+        default: return "Tilt left, right and toward your Mac. These two live views should follow. If they feel right, return upright and save."
+        }
     }
     private var buttonTitle: String {
-        step == 1 ? "I'm upright — save pose" : step == 2 ? "I'm tilted left — save pose" : "I'm tilted toward the screen — finish"
+        switch step {
+        case 1: return "Save upright pose"
+        case 2: return "Save left tilt"
+        case 3: return "I'm back upright — continue"
+        case 4: return "Save forward tilt & test"
+        default: return "Looks right — save grip"
+        }
     }
 
     var body: some View {
@@ -39,62 +83,124 @@ struct CalibrationGuidePanel: View {
             HStack {
                 Text("AIRCADE / GRIP SETUP").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1).foregroundStyle(cyan)
                 Spacer()
+                if let useSaved { Button("Use saved grip", action: useSaved).buttonStyle(.plain).foregroundStyle(cyan) }
                 Button("Cancel", action: cancel).buttonStyle(.plain).foregroundStyle(.secondary)
             }
-            HStack(spacing: 12) {
-                ForEach(1...3, id: \.self) { index in
-                    HStack(spacing: 7) {
+            HStack(spacing: 9) {
+                ForEach(1...5, id: \.self) { index in
+                    HStack(spacing: 5) {
                         Image(systemName: index < step ? "checkmark.circle.fill" : "\(index).circle\(index == step ? ".fill" : "")")
-                        Text(index == 1 ? "Upright" : index == 2 ? "Left tilt" : "Toward screen")
+                        Text(labels[index - 1])
                     }.font(.system(size: 12, weight: index == step ? .semibold : .regular))
                         .foregroundStyle(index <= step ? cyan : .secondary)
-                    if index < 3 { Rectangle().fill(.white.opacity(0.12)).frame(height: 1) }
+                    if index < 5 { Rectangle().fill(.white.opacity(0.12)).frame(height: 1) }
                 }
             }
             VStack(alignment: .leading, spacing: 7) {
-                Text(title).font(.system(size: 28, weight: .bold, design: .rounded))
-                Text(instruction).font(.system(size: 15)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }.frame(minHeight: 88, alignment: .topLeading)
-
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 18).fill(Color(red: 0.035, green: 0.065, blue: 0.10))
-                TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-                    GripAnimation(step: step, elapsed: previewTime ?? context.date.timeIntervalSince(animationStart))
+                Label("SELECTED: \(activeSource.uppercased()) AIRPOD", systemImage: "airpodspro")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                if let sourceWarning {
+                    Text(sourceWarning).font(.callout)
+                    Text("macOS chooses which earbud sends motion. Aircade will not switch your controller silently.")
+                        .font(.caption).fixedSize(horizontal: false, vertical: true)
+                    if let adoptSourceTitle { Button(adoptSourceTitle, action: adoptSource).buttonStyle(.bordered) }
                 }
-                Text(step == 3 ? "SIDE VIEW · YOU → YOUR MAC" : "YOUR VIEW · AS IF LOOKING AT YOUR OWN HAND")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(0.4)
-                    .foregroundStyle(cyan.opacity(0.9)).padding(16)
-            }.frame(height: 286)
-
-            HStack {
-                Label(step == 1 ? "The dot marks the top of your imaginary handle." : "Dashed outline = the pose to hold when you press save.", systemImage: "info.circle")
-                    .font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Replay") { animationStart = Date() }.font(.caption)
-            }
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "hand.draw").foregroundStyle(cyan)
-                Text("Rotate your wrist. Don't slide your whole hand sideways, and don't turn the AirPod inside your fingers.")
-                    .font(.callout).fixedSize(horizontal: false, vertical: true)
+            }.foregroundStyle(sourceWarning == nil ? cyan : .orange)
+                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                .background((sourceWarning == nil ? cyan : Color.orange).opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(title).font(.system(size: 27, weight: .bold, design: .rounded))
+                        Text(instruction).font(.system(size: 15)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if step == 5 {
+                        CalibrationBladePreview(orientation: liveOrientation).frame(height: 240)
+                    } else {
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: 18).fill(Color(red: 0.035, green: 0.065, blue: 0.10))
+                            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                                GripAnimation(step: illustrationStep, elapsed: previewTime ?? context.date.timeIntervalSince(animationStart))
+                            }
+                            Text("EXAMPLE • NOT LIVE  /  " + (step == 4 ? "SIDE VIEW" : "YOUR VIEW"))
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(cyan.opacity(0.9)).padding(16)
+                        }.frame(height: 240)
+                        HStack {
+                            Text(step == 3 ? "Match your saved starting angle, not the exact drawing." : "Imagine a handle in your hand. The dot marks its top.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Replay") { animationStart = Date() }.font(.caption)
+                        }
+                    }
+                    Label("Your forearm can move. Keep the AirPod fixed in your fingers: its angle controls the blade. Sliding your hand alone needs the optional webcam.", systemImage: "hand.draw")
+                        .font(.callout).fixedSize(horizontal: false, vertical: true)
+                        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                }
+            }.frame(maxHeight: .infinity)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    if isLive, let tiltDegrees {
+                        Text(String(format: "LIVE  %.0f° since saved start", tiltDegrees)).font(.headline.monospacedDigit())
+                    } else if isLive {
+                        Text(String(format: "LIVE  %.0f°/s rotation speed", rotationSpeed * 180 / .pi)).font(.headline.monospacedDigit())
+                    } else { Text("Live motion unavailable").font(.headline) }
+                    Spacer()
+                    Text(isLive && poseReady ? "Ready" : "Not ready").font(.caption.weight(.semibold))
+                }
+                Text(poseHint.isEmpty ? status : poseHint).font(.callout).fixedSize(horizontal: false, vertical: true)
+                if !errorMessage.isEmpty && !poseReady && errorMessage != poseHint {
+                    Text("Not saved: " + errorMessage).font(.caption).fixedSize(horizontal: false, vertical: true)
+                }
+                if step > 1 {
+                    Text("This measures the earbud's orientation change, not your forearm's angle. Poses save only after a steady hold.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
             }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-            Text(status).font(.caption).foregroundStyle(isLive ? Color.secondary : Color.orange)
-                .frame(minHeight: 28, alignment: .topLeading).fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(isLive && poseReady ? cyan : .orange)
+                .background((isLive && poseReady ? cyan : Color.orange).opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
             HStack {
-                Text("Move → hold still → save\nYou control when the pose is captured.")
-                    .font(.caption).foregroundStyle(.secondary)
+                if let restart { Button("Start over", action: restart).disabled(!isLive) }
                 Spacer()
                 Button(buttonTitle, action: capture)
                     .buttonStyle(.borderedProminent).tint(cyan).foregroundStyle(.black)
                     .controlSize(.large).keyboardShortcut(.return, modifiers: [])
-                    .disabled(!isLive)
+                    .disabled(!isLive || !poseReady)
             }
-        }
-        .padding(26)
-        .frame(width: 700)
-        .background(Color(red: 0.035, green: 0.045, blue: 0.07))
-        .preferredColorScheme(.dark)
-        .onChange(of: step) { animationStart = Date() }
+        }.padding(26).frame(width: 700, height: 740)
+            .background(Color(red: 0.035, green: 0.045, blue: 0.07)).preferredColorScheme(.dark)
+            .onChange(of: step) { animationStart = Date() }
+    }
+}
+
+/// Two projections of the same unsmoothed, proposed grip mapping. No instructional
+/// animation is mixed into the live feedback, and no gain is applied to the angle.
+struct CalibrationBladePreview: View {
+    let orientation: simd_quatf?
+    private let cyan = Color(red: 0.35, green: 0.93, blue: 0.91)
+    var body: some View {
+        Canvas { context, size in
+            let direction = orientation?.act(SIMD3<Float>(0, 1, 0)) ?? SIMD3<Float>(0, 1, 0)
+            for index in 0..<2 {
+                let center = CGPoint(x: size.width * (index == 0 ? 0.25 : 0.75), y: size.height - 45)
+                let length: CGFloat = 125
+                let tip = CGPoint(x: center.x + CGFloat(index == 0 ? direction.x : -direction.z) * length,
+                                  y: center.y - CGFloat(direction.y) * length)
+                var neutral = Path(); neutral.move(to: center); neutral.addLine(to: CGPoint(x: center.x, y: center.y - length))
+                context.stroke(neutral, with: .color(.white.opacity(0.2)), style: StrokeStyle(lineWidth: 2, dash: [4, 5]))
+                var blade = Path(); blade.move(to: center); blade.addLine(to: tip)
+                context.stroke(blade, with: .color(cyan.opacity(0.2)), style: StrokeStyle(lineWidth: 16, lineCap: .round))
+                context.stroke(blade, with: .color(orientation == nil ? .gray : cyan), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                context.fill(Path(ellipseIn: CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14)), with: .color(.white))
+                context.draw(Text(index == 0 ? "YOUR VIEW • LEFT ↔ RIGHT" : "SIDE VIEW • SCREEN →")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(cyan),
+                             at: CGPoint(x: center.x, y: 26))
+            }
+            context.draw(Text(orientation == nil ? "WAITING FOR LIVE MOTION" : "LIVE PREVIEW • SAME MAPPING AS THE GAME")
+                .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(.gray),
+                         at: CGPoint(x: size.width / 2, y: size.height - 15))
+        }.background(Color(red: 0.035, green: 0.065, blue: 0.10), in: RoundedRectangle(cornerRadius: 18))
     }
 }
 
@@ -120,6 +226,8 @@ struct GripAnimation: View {
 
     var body: some View {
         Canvas { context, size in
+            context.scaleBy(x: 1, y: size.height / 286)
+            let size = CGSize(width: size.width, height: 286)
             let origin = CGPoint(x: size.width * (step == 3 ? 0.47 : 0.53), y: 210)
             let length: CGFloat = 120
             let sign: Double = step == 2 ? -1 : 1
@@ -184,7 +292,7 @@ struct GripAnimation: View {
             context.draw(Text(phase.text).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(.white.opacity(0.8)),
                          at: CGPoint(x: size.width / 2, y: 271))
         }
-        .accessibilityLabel(step == 1 ? "Hold upright, with your wrist still." : step == 2 ? "From your point of view, the top leans 45 degrees left while the wrist stays in place." : "Side view: you are on the left and your Mac is on the right. From upright, the top leans 45 degrees toward your Mac.")
+        .accessibilityLabel(step == 1 ? "Hold your imaginary handle upright in a fixed grip." : step == 2 ? "From your point of view, the top leans 45 degrees left with the AirPod fixed in your grip. Your forearm can move too." : "Side view: you are on the left and your Mac is on the right. From upright, the top leans 45 degrees toward your Mac.")
     }
 
     private func drawArrow(context: inout GraphicsContext, from a: CGPoint, to b: CGPoint) {
