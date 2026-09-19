@@ -161,6 +161,15 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         }
         tennis.pollInput = { [weak self] in self?.consumeMotion(); self?.routeGameInput() }
         arena.onEvent = { [weak self] message in self?.event(message) }
+        arena.onTouch = { [weak self] effect in
+            guard let self, self.showingLab, !self.simulated, self.hasFreshMotion else { return }
+            self.controllers.titan.play(effect, for: .airPod)
+        }
+        menu.onTouch = { [weak self] in
+            guard let self, let sample = self.controllers.snapshot(for: self.controllers.menuDevice),
+                  sample.isFresh(at: ProcessInfo.processInfo.systemUptime), !sample.simulated else { return }
+            self.controllers.titan.play(.touch, for: self.controllers.menuDevice)
+        }
         camera.onPoint = { [weak self] point, time in self?.receiveHand(point, time: time) }
         camera.onLost = { [weak self] in
             guard let self else { return }

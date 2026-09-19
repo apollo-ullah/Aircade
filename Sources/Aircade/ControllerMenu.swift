@@ -34,6 +34,7 @@ struct MenuDwell {
 
 final class ControllerMenu: ObservableObject {
     let pointer = PointerModel()
+    var onTouch: (() -> Void)?
     @Published private(set) var hovered: UUID?
     @Published private(set) var progress = 0.0
     @Published private(set) var active = false
@@ -81,14 +82,14 @@ final class ControllerMenu: ObservableObject {
         if hovered != target?.id { hovered = target?.id; if hovered != nil { playSound(.hover) } }
         if progress != dwell.progress { progress = dwell.progress }
         if let selected, let action = targets.first(where: { $0.id == selected && $0.enabled })?.action {
-            playSound(.select); action()
+            onTouch?(); playSound(.select); action()
         }
     }
 
     func clickHovered() {
         let point = CGPoint(x: pointer.unitPoint.x * size.width, y: pointer.unitPoint.y * size.height)
         guard let target = targets.first(where: { $0.enabled && $0.frame.contains(point) }) else { return }
-        target.action()
+        onTouch?(); target.action()
     }
     func mouse(_ point: CGPoint, time: Double = ProcessInfo.processInfo.systemUptime) {
         let previous = lastMousePoint; lastMousePoint = point

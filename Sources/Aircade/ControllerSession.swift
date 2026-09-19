@@ -32,6 +32,7 @@ final class ControllerSession: ObservableObject {
     @Published private(set) var duelAssignments: [PlayerSlot: ControllerDevice] = [.one: .airPod, .two: .phone]
     @Published private(set) var revision: UInt64 = 0
     @Published private(set) var duelActive = false
+    let titan = TitanHaptics()
     let phoneHost: PhoneControllerHost
     var onInputChanged: ((ControllerDevice) -> Void)?
     var onInvalidation: ((ControllerDevice, String) -> Void)?
@@ -74,7 +75,7 @@ final class ControllerSession: ObservableObject {
     func tick() { phoneHost.tick() }
     func shutdown() {
         timer?.invalidate(); timer = nil
-        endRun(); phoneHost.shutdown()
+        endRun(); phoneHost.shutdown(); titan.disconnect()
     }
     func selectSolo(_ device: ControllerDevice) {
         guard soloDevice != device else { return }
@@ -159,8 +160,14 @@ final class ControllerSession: ObservableObject {
         activeFeedback = nil; phoneHost.setActiveRun(nil)
     }
     func sendFeedback(run: UUID, to device: ControllerDevice, cue: ControllerFeedback) {
-        guard let activeFeedback, activeFeedback.id == run, let original = activeFeedback.recipients[device],
-              device == .phone, let current = phoneHost.connection,
+        guard let activeFeedback, activeFeedback.id == run,
+              let original = activeFeedback.recipients[device] else { return }
+        if let sample = snapshot(for: device), sample.controllerID == original.0,
+           sample.sessionID == original.1, sample.isFresh(at: clock()), !sample.simulated,
+           let effect = TitanEffect(rawValue: cue.rawValue) {
+            titan.play(effect, for: device)
+        }
+        guard device == .phone, let current = phoneHost.connection,
               current.controllerID == original.0, current.sessionID == original.1 else { return }
         phoneHost.feedback(run: run, cue: cue)
     }

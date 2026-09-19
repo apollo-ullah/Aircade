@@ -23,6 +23,7 @@ final class TrainingArena: ObservableObject {
     @Published var cutQuality: Float = 0
     weak var scene: SaberScene?
     var onEvent: ((String) -> Void)?
+    var onTouch: ((TitanEffect) -> Void)?
     private var previous: SaberPose?
     private var previousTime: Double?
     private var respawnAt: Double?
@@ -90,6 +91,7 @@ final class TrainingArena: ObservableObject {
             detail = !directionOK ? "Follow the arrow on the block." : "Sweep across the blade instead of pushing along it."
             lastEvent = "Glance"
             scene?.impact(at: hit.point, kind: .glance, velocity: hit.velocity)
+            onTouch?(.block)
             play("Tink")
             onEvent?("GLANCE speed=\(hit.speed) alignment=\(hit.cuttingAlignment)")
             return
@@ -103,6 +105,7 @@ final class TrainingArena: ObservableObject {
         respawnAt = time + 0.85
         scene?.splitTarget(velocity: hit.velocity)
         scene?.impact(at: hit.point, kind: .cut, velocity: hit.velocity)
+        onTouch?(.hit)
         play("Pop")
         onEvent?("CUT points=\(points) speed=\(hit.speed) alignment=\(hit.cuttingAlignment)")
     }
@@ -141,6 +144,7 @@ final class TrainingArena: ObservableObject {
             lastEvent = "Parry +150"
             scene?.impact(at: guardTarget, kind: .parry, velocity: SIMD3<Float>(0, 1, 0))
             scene?.hideAttack(); self.impactAt = nil; attackInProgress = false
+            onTouch?(.block)
             play("Glass"); onEvent?("PARRY horizontalGuard=\(horizontalGuard)")
         } else if remaining < -0.18 {
             misses += 1; combo = 0
@@ -148,6 +152,7 @@ final class TrainingArena: ObservableObject {
             lastEvent = "Damage"
             scene?.impact(at: guardTarget, kind: .damage, velocity: .zero)
             scene?.hideAttack(); self.impactAt = nil; attackInProgress = false
+            onTouch?(.damage)
             play("Basso"); onEvent?("DAMAGE horizontalGuard=\(horizontalGuard)")
         }
     }

@@ -155,6 +155,7 @@ struct AircadeApp: App {
                 Button("Stop Tracking") { motion.stop() }.keyboardShortcut(".")
             }
         }
+        Settings { TitanHapticsView(haptics: motion.controllers.titan) }
     }
 }
 
