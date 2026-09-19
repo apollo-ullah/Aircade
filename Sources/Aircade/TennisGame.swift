@@ -19,11 +19,15 @@ final class TennisGame: ObservableObject {
     @Published var bestScore = 0
     @Published var newRecord = false
     @Published var sound = true
+    @Published private(set) var isDemo = false
     @Published private(set) var recoveringInput = false
 
     var authorizeRun: (() -> Bool)?
-    var onRunStarted: (() -> Void)?
-    var onRunFinished: ((TennisMatch) -> Void)?
+    private(set) var runID: String?
+    var onRunStarted: ((Bool) -> String?)?
+    var onRunFinished: ((TennisMatch, Bool, String?) -> Bool)?
+    var onRunAbandoned: ((String?) -> Void)?
+    var onJudgment: ((TennisEvent) -> Void)?
     var pollInput: (() -> Void)?
 
     private let scene: SaberScene
@@ -34,6 +38,7 @@ final class TennisGame: ObservableObject {
     private var lastTick: Double
     private var previousPose: SaberPose?
     private var previousTime: Double?
+    private var previousBall: (id: Int, point: SIMD3<Float>)?
     private var lastInput = 0.0
     private var feedbackUntil = 0.0
     private var resultSaved = false
@@ -57,16 +62,19 @@ final class TennisGame: ObservableObject {
     private var now: Double { clock() }
     var liveReady: Bool { inputReady && now - lastInput < ArcadeGame.freshInputAge }
 
-    func start() {
+    func start(demo: Bool = false) {
         guard enabled else { return }
         if let authorizeRun, !authorizeRun() { return }
         guard liveReady else { return }
-        onRunStarted?()
+        if !resultSaved { onRunAbandoned?(runID) }
+        runID = onRunStarted?(demo)
+        isDemo = demo
         state.start()
         resultSaved = false
         newRecord = false
         feedback = ""
         previousPose = nil
+        previousBall = nil
         previousTime = nil
         recoveringInput = false
         lastTick = now
@@ -79,6 +87,7 @@ final class TennisGame: ObservableObject {
         state.pause()
         recoveringInput = false
         previousPose = nil
+        previousBall = nil
         previousTime = nil
     }
 
@@ -88,21 +97,32 @@ final class TennisGame: ObservableObject {
         lastTick = now
         recoveringInput = false
         previousPose = nil
+        previousBall = nil
         previousTime = nil
     }
 
     func leave() {
+        if !resultSaved, runID != nil { onRunAbandoned?(runID) }
+        runID = nil
         state.quit()
         scene.clearTennis()
         feedback = ""
         recoveringInput = false
         previousPose = nil
+        previousBall = nil
         previousTime = nil
+    }
+
+    func observeSimulatedInput(_ simulated: Bool) {
+        if simulated && (state.phase == .playing || state.phase == .countdown || state.phase == .paused) {
+            isDemo = true
+        }
     }
 
     func invalidateInput(_ reason: String = "Controller tracking paused. Reconnect or recenter, then resume.") {
         inputReady = false
         previousPose = nil
+        previousBall = nil
         previousTime = nil
         recoveringInput = false
         pause(reason)
@@ -111,6 +131,7 @@ final class TennisGame: ObservableObject {
     func waitForFreshInput() {
         inputReady = false
         previousPose = nil
+        previousBall = nil
         previousTime = nil
         guard state.phase == .playing || state.phase == .countdown else { return }
         let age = now - lastInput
@@ -125,16 +146,22 @@ final class TennisGame: ObservableObject {
     func update(pose: SaberPose, time: Double, ready: Bool) {
         guard enabled else { return }
         guard ready else { invalidateInput(); return }
+        guard time.isFinite, time >= lastInput else { return }
         inputReady = true
         lastInput = time
-        guard state.phase == .playing else { previousPose = nil; previousTime = nil; return }
-        defer { previousPose = pose; previousTime = time }
-        guard !recoveringInput, let previousPose, let previousTime,
-              let ball = state.ball, ball.direction == .towardPlayer else { return }
+        guard state.phase == .playing else { previousPose = nil; previousTime = nil; previousBall = nil; return }
+        defer {
+            previousPose = pose; previousTime = time
+            previousBall = state.ball.flatMap { $0.direction == .towardPlayer ? ($0.id, $0.position(at: state.elapsed)) : nil }
+        }
+        guard !recoveringInput, let previousPose, let previousTime, let previousBall,
+              let ball = state.ball, ball.direction == .towardPlayer, ball.id == previousBall.id else { return }
         let centre = ball.position(at: state.elapsed)
-        guard let contact = CombatGeometry.sweep(from: previousPose, to: pose, dt: time - previousTime,
-                                                  center: centre, half: SIMD3<Float>(repeating: 0.27), length: 1.75),
-              let event = state.playerHit(speed: contact.speed, horizontalDirection: contact.velocity.x) else { return }
+        guard let contact = RacketGeometry.sweep(from: previousPose, to: pose, dt: time - previousTime,
+                                                  ballFrom: previousBall.point, ballTo: centre),
+              let shot = TennisShotResponse.make(contact: contact),
+              let event = state.playerHit(speed: shot.swingSpeed, targetX: shot.targetX,
+                                         flightDuration: shot.flightDuration, contactPoint: contact.point) else { return }
         handle(event, point: contact.point, velocity: contact.velocity)
         scene.syncTennis(ball: state.ball, elapsed: state.elapsed)
     }
@@ -154,7 +181,7 @@ final class TennisGame: ObservableObject {
             return
         }
         guard delta.isFinite, delta > 0 else { return }
-        if delta > 0.1 { previousPose = nil; previousTime = nil }
+        if delta > 0.1 { previousPose = nil; previousTime = nil; previousBall = nil }
         for event in state.advance(min(delta, 0.1), opponent: opponent) {
             handle(event, point: state.ball?.position(at: state.elapsed) ?? SIMD3<Float>(0, 0, 0), velocity: .zero)
         }
@@ -163,6 +190,7 @@ final class TennisGame: ObservableObject {
     }
 
     private func handle(_ event: TennisEvent, point: SIMD3<Float>, velocity: SIMD3<Float>) {
+        onJudgment?(event)
         feedbackUntil = now + 0.9
         switch event {
         case .opponentReturn:
@@ -188,8 +216,8 @@ final class TennisGame: ObservableObject {
     private func finish() {
         guard !resultSaved else { return }
         resultSaved = true
-        onRunFinished?(state)
-        if state.score > bestScore {
+        let eligible = onRunFinished?(state, isDemo, runID) ?? !isDemo
+        if eligible && !isDemo && state.score > bestScore {
             bestScore = state.score
             newRecord = true
             scoreDefaults.set(bestScore, forKey: "tennis.best")

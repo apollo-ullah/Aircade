@@ -1,5 +1,7 @@
 import AppKit
 import CoreMotion
+import Combine
+import ControllerLink
 import MotionCore
 import simd
 import SwiftUI
@@ -61,7 +63,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
 
     @Published var useCamera = false {
         didSet {
-            arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput()
+            invalidateAirPodInput()
             handAnchor = nil; handPosition = SIMD3<Float>(0, -0.5, 0)
             if !useCamera { camera.stop() }
             updateScene(at: now)
@@ -76,9 +78,14 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     @Published var calibrationSource = ""
     @Published var showingLab = false
     @Published var showingMultiplayer = false
-    lazy var multiplayer = MultiplayerModel(motion: self)
+    lazy var controllers = ControllerSession(clock: { [weak self] in self?.now ?? ProcessInfo.processInfo.systemUptime })
+    lazy var multiplayer = MultiplayerModel(controllers: controllers)
+    private var controllerObservation: AnyCancellable?
+    private var soloFeedbackRun: UUID?
+    private var soloFeedbackDevice: ControllerDevice = .airPod
+    private var lastRoutedSample: String?
     @Published var selectedSport: AircadeSport = .neonRush
-    let players = PlayerSession()
+    let players: PlayerSession
     let camera = HandTracker()
     let scene = SaberScene()
     lazy var arena = TrainingArena(scene: scene)
@@ -131,13 +138,13 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     init(logDirectory customLogDirectory: URL?) {
         logDirectory = customLogDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Aircade/Logs", isDirectory: true)
+        players = customLogDirectory.map {
+            PlayerSession(queueDirectory: $0.appendingPathComponent("player-session"), automaticRetry: false,
+                          uploadOnFinish: false, configurationProvider: { nil })
+        } ?? PlayerSession()
         super.init()
-        game.authorizeRun = { [weak self] in self?.players.authorize() ?? false }
-        game.onRunStarted = { [weak self] demo in self?.players.beginRun(demo: demo) }
-        game.onRunFinished = { [weak self] state, demo in self?.players.finishRun(state, demo: demo) }
-        tennis.authorizeRun = { [weak self] in self?.players.authorize() ?? false }
-        tennis.onRunStarted = { [weak self] in self?.players.beginRun(demo: false) }
-        tennis.onRunFinished = { [weak self] state in self?.players.finishTennis(state, demo: false) }
+        configureRunPolicy()
+        configureControllers()
         tennis.enabled = false
         arena.enabled = false
         scene.setSport(.neonRush)
@@ -146,15 +153,15 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         game.pollInput = { [weak self] in
             guard let self else { return }
             if self.scriptedScenario != nil { self.updateScriptedSaber() }
-            else { self.consumeMotion() }
+            else { self.consumeMotion(); self.routeGameInput() }
         }
-        tennis.pollInput = { [weak self] in self?.consumeMotion() }
+        tennis.pollInput = { [weak self] in self?.consumeMotion(); self?.routeGameInput() }
         arena.onEvent = { [weak self] message in self?.event(message) }
         camera.onPoint = { [weak self] point, time in self?.receiveHand(point, time: time) }
         camera.onLost = { [weak self] in
             guard let self else { return }
             self.handAnchor = nil
-            if self.useCamera { self.arena.invalidateInput(); self.game.invalidateInput(); self.tennis.invalidateInput(); self.scene.setLive(false) }
+            if self.useCamera { self.invalidateAirPodInput() }
         }
         try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true)
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.tick() }
@@ -178,6 +185,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     }
 
     func start(demo: Bool = false) {
+        if demo { controllers.selectSolo(.airPod) }
         stop()
         if demo { useCamera = false; grip = 0 }
         simulated = demo
@@ -193,7 +201,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         arrivals = []; speedHistory = []
         continuity = ContinuityTracker(); tracker = OrientationTracker(); detector = SwingDetector()
         saber = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
-        scene.setOrientation(saber)
+        if showingLab || (!showingMultiplayer && controllers.soloDevice == .airPod) { scene.setOrientation(saber) }
         testMessage = "No hardware test completed in this session"
         testProgress = 0; testAngle = 0
         openLog()
@@ -283,8 +291,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         calibrated = false
         calibrationStep = 0; calibrationSession = nil
         status = "Stopped"
-        scene.setLive(false)
-        arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput()
+        invalidateAirPodInput()
         try? log?.close(); log = nil
         lastHealthWrite = 0
         tick()
@@ -306,7 +313,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
 
     func recenter() {
         guard calibrationStep == 0, hasFreshMotion, let rawOrientation else { return }
-        arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput()
+        invalidateAirPodInput()
         handAnchor = camera.point
         handPosition = SIMD3<Float>(0, -0.5, 0)
         tracker.recenter(rawOrientation)
@@ -373,7 +380,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         rawOrientation = nil; lastReceived = nil; lastSensorTime = nil; sampleAge = .infinity
         calibrated = false; tracker = OrientationTracker(); arrivals.removeAll()
         loadGrip(for: source)
-        arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput(); scene.setLive(false)
+        invalidateAirPodInput()
         if wasCalibrating {
             simpleCalibration = SimpleGripCalibration()
             calibrationSession = useSimpleCalibration ? nil : GripCalibrationSession(source: source)
@@ -416,7 +423,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
             guard accepted else {
                 if testing { finishTrial(message: "Test interrupted: motion source changed — no pass recorded") }
                 calibrated = false; tracker = OrientationTracker()
-                arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput(); scene.setLive(false)
+                invalidateAirPodInput()
                 interruptCalibration("macOS switched to \(location). Return to \(source), then Start over, or select the other earbud below.")
                 status = "\(source) selected, but macOS is sending \(location) motion"
                 return
@@ -434,7 +441,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         sampleAge = max(0, now - received)
         if interrupted {
             calibrated = false; tracker = OrientationTracker()
-            arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput()
+            invalidateAirPodInput()
             interruptCalibration("Motion was interrupted. Check your controller, then choose Start over.")
             event("Stream resumed — recenter required")
         } else if dt > 0.5 && calibrationStep > 0 {
@@ -525,10 +532,9 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         sampleAge = lastReceived.map { now - $0 } ?? .infinity
         if sampleAge >= ArcadeGame.freshInputAge {
             frequency = 0
-            scene.setLive(false)
             arena.invalidateInput()
-            if selectedSport == .tennis { tennis.waitForFreshInput() }
-            else { game.waitForFreshInput() }
+            if showingLab { scene.setLive(false) }
+            routeGameInput()
             if running && samples > 0 && !sourceMismatch { status = "Motion stale — waiting for fresh samples" }
             if sampleAge > 0.5 && running && samples > 0 {
                 interruptCalibration("Motion stopped during setup. Wait for fresh motion, then choose Start over.")
@@ -603,6 +609,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         if showingMultiplayer { multiplayer.close(); showingMultiplayer = false }
         game.leave()
         tennis.leave()
+        lastRoutedSample = nil
         showingLab = visible
         game.enabled = !visible && selectedSport == .neonRush
         tennis.enabled = !visible && selectedSport == .tennis
@@ -613,7 +620,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     }
 
     func showMultiplayer(_ visible: Bool) {
-        game.leave(); tennis.leave(); showingLab = false; arena.enabled = false
+        game.leave(); tennis.leave(); lastRoutedSample = nil; showingLab = false; arena.enabled = false
         showingMultiplayer = visible
         game.enabled = !visible && selectedSport == .neonRush
         tennis.enabled = !visible && selectedSport == .tennis
@@ -625,6 +632,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         if showingMultiplayer { multiplayer.close(); showingMultiplayer = false }
         game.leave()
         tennis.leave()
+        lastRoutedSample = nil
         selectedSport = sport
         game.enabled = sport == .neonRush
         tennis.enabled = sport == .tennis
@@ -643,7 +651,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         if handAnchor == nil {
             handAnchor = point
             handPosition = SIMD3<Float>(0, -0.5, 0)
-            arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput()
+            invalidateAirPodInput()
         }
         guard let handAnchor else { return }
         let target = SIMD3<Float>(Float((point.x - handAnchor.x) * cameraGain),
@@ -656,19 +664,150 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     }
 
     private func updateScene(at time: Double) {
-        if showingMultiplayer { return }
         let freshMotion = lastReceived.map { now - $0 < 0.25 } ?? false
         let freshHand = camera.running && camera.point != nil && now - lastHandTime < 0.25
-        let ready = running && !sourceMismatch && calibrated && freshMotion && (!useCamera || freshHand) && calibrationStep == 0
-        let pose = SaberPose(position: useCamera ? handPosition : SIMD3<Float>(0, -0.5, 0), orientation: saber)
-        scene.setPose(pose, trail: ready)
-        scene.setLive(ready)
-        if showingLab { arena.update(pose: pose, time: time, ready: ready) }
-        else if running && !sourceMismatch && calibrated && calibrationStep == 0 && !freshMotion {
+        let ready = running && !sourceMismatch && calibrated && freshMotion && calibrationStep == 0
+        if let lastReceived {
+            controllers.submitAirPod(orientation: saber, source: controllerName, ready: ready,
+                                     simulated: simulated, sampleTime: lastReceived)
+        }
+        if showingLab {
+            let pose = SaberPose(position: useCamera ? handPosition : SIMD3<Float>(0, -0.5, 0), orientation: saber)
+            let labReady = ready && (!useCamera || freshHand)
+            scene.setPose(pose, trail: labReady); scene.setLive(labReady)
+            arena.update(pose: pose, time: time, ready: labReady)
+        } else { routeGameInput() }
+    }
+
+    /// Only the active game's assigned input can affect it. Sensor timestamps are
+    /// kept stable between render ticks; polling a snapshot never freshens it.
+    func routeGameInput() {
+        guard !showingLab, !showingMultiplayer, scriptedScenario == nil else { return }
+        let device = controllers.soloDevice
+        guard let sample = controllers.snapshot(for: device), sample.ready else {
+            scene.setLive(false)
+            if selectedSport == .tennis { tennis.invalidateInput(controllers.readiness(for: device)) }
+            else { game.invalidateInput(controllers.readiness(for: device)) }
+            lastRoutedSample = nil
+            return
+        }
+        guard sample.isFresh(at: now) else {
+            scene.setLive(false); lastRoutedSample = nil
             if selectedSport == .tennis { tennis.waitForFreshInput() }
             else { game.waitForFreshInput() }
-        } else if selectedSport == .tennis { tennis.update(pose: pose, time: time, ready: ready) }
-        else { game.update(pose: pose, time: time, ready: ready) }
+            return
+        }
+        let cameraApplies = device == .airPod && useCamera
+        if cameraApplies && !(camera.running && camera.point != nil && now - lastHandTime < 0.25) {
+            if selectedSport == .tennis { tennis.invalidateInput("Camera hand tracking paused.") }
+            else { game.invalidateInput("Camera hand tracking paused.") }
+            scene.setLive(false); lastRoutedSample = nil; return
+        }
+        let token = "\(device.rawValue)/\(sample.sessionID)/\(sample.sequence)/\(selectedSport.rawValue)/\(cameraApplies ? lastHandTime : 0)"
+        guard token != lastRoutedSample else { return }
+        lastRoutedSample = token
+        let pose = SaberPose(position: cameraApplies ? handPosition : SIMD3<Float>(0, -0.5, 0), orientation: sample.orientation)
+        scene.setPose(pose, trail: true); scene.setLive(true)
+        let stamp = cameraApplies ? max(sample.capturedAt, lastHandTime) : sample.capturedAt
+        if selectedSport == .tennis {
+            tennis.observeSimulatedInput(sample.simulated)
+            if let id = tennis.runID { players.observeInput(simulated: sample.simulated, runID: id) }
+            tennis.update(pose: pose, time: stamp, ready: true)
+        } else {
+            game.observeSimulatedInput(sample.simulated)
+            if let id = game.runID { players.observeInput(simulated: sample.simulated, runID: id) }
+            game.update(pose: pose, time: stamp, ready: true)
+        }
+    }
+
+    private func invalidateAirPodInput(_ reason: String = "AirPod tracking changed. Recenter or reconnect, then resume.") {
+        arena.invalidateInput()
+        controllers.invalidateAirPod(reason: reason)
+        if showingLab || (!showingMultiplayer && controllers.soloDevice == .airPod) { scene.setLive(false) }
+    }
+
+    var activeControllerName: String { controllers.name(for: controllers.soloDevice) }
+    var activeInputSimulated: Bool { controllers.soloDevice == .airPod ? simulated : (controllers.snapshot(for: .phone)?.simulated ?? false) }
+    func recenterSelectedController() { controllers.recenter(showingLab ? .airPod : controllers.soloDevice) }
+    func startControllerSession() { controllers.start() }
+    func shutdownControllerSession() { controllers.shutdown() }
+
+    private func configureControllers() {
+        controllers.onRecenterAirPod = { [weak self] in self?.recenter() }
+        controllers.onInputChanged = { [weak self] _ in self?.routeGameInput() }
+        controllers.onInvalidation = { [weak self] device, reason in
+            guard let self, !self.showingLab, !self.showingMultiplayer, self.controllers.soloDevice == device else { return }
+            self.lastRoutedSample = nil
+            self.game.invalidateInput(reason); self.tennis.invalidateInput(reason)
+        }
+        controllers.onAssignmentChanged = { [weak self] in
+            guard let self else { return }
+            self.lastRoutedSample = nil
+            if !self.showingMultiplayer {
+                self.game.invalidateInput("Controller changed. Hold your starting pose, then resume.")
+                self.tennis.invalidateInput("Controller changed. Hold your starting pose, then resume.")
+                self.routeGameInput()
+            }
+        }
+        controllerObservation = controllers.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+    }
+
+    private func beginSoloRun(game kind: ArcadeRunGame, mode: String, demo: Bool) -> String {
+        let context = players.beginRun(game: kind, mode: mode, simulated: demo || activeInputSimulated)
+        soloFeedbackDevice = controllers.soloDevice
+        soloFeedbackRun = controllers.beginRun()
+        return context.id
+    }
+    private func endSoloFeedback() {
+        if let run = soloFeedbackRun { controllers.endRun(run) }
+        soloFeedbackRun = nil
+    }
+    private func sendSoloFeedback(_ cue: ControllerFeedback) {
+        guard let run = soloFeedbackRun else { return }
+        controllers.sendFeedback(run: run, to: soloFeedbackDevice, cue: cue)
+    }
+    private func configureRunPolicy() {
+        game.authorizeRun = { [weak self] in self?.players.authorize() ?? false }
+        game.onRunStarted = { [weak self] demo in
+            guard let self else { return nil }
+            return self.beginSoloRun(game: .neonRush, mode: self.game.difficulty.rawValue, demo: demo)
+        }
+        game.onRunFinished = { [weak self] state, demo, id in
+            guard let self, let id else { return false }
+            self.sendSoloFeedback(state.completed ? .victory : .defeat)
+            self.endSoloFeedback()
+            return self.players.finishRun(state, demo: demo, runID: id)?.eligibleForLocalBest ?? false
+        }
+        game.onRunAbandoned = { [weak self] id in
+            guard let self, let id else { return }
+            self.players.abandonRun(runID: id); self.endSoloFeedback()
+        }
+        game.onJudgment = { [weak self] event in
+            switch event.kind {
+            case .cut, .perfect: self?.sendSoloFeedback(.hit)
+            case .wrongDirection: self?.sendSoloFeedback(.block)
+            case .hazard, .miss: self?.sendSoloFeedback(.damage)
+            }
+        }
+        tennis.authorizeRun = { [weak self] in self?.players.authorize() ?? false }
+        tennis.onRunStarted = { [weak self] demo in self?.beginSoloRun(game: .tennis, mode: "Tennis", demo: demo) }
+        tennis.onRunFinished = { [weak self] state, demo, id in
+            guard let self, let id else { return false }
+            self.sendSoloFeedback(state.completed ? .victory : .defeat)
+            self.endSoloFeedback()
+            return self.players.finishTennis(state, demo: demo, runID: id)?.eligibleForLocalBest ?? false
+        }
+        tennis.onRunAbandoned = { [weak self] id in
+            guard let self, let id else { return }
+            self.players.abandonRun(runID: id); self.endSoloFeedback()
+        }
+        tennis.onJudgment = { [weak self] event in
+            switch event {
+            case .playerReturn: self?.sendSoloFeedback(.hit)
+            case .miss: self?.sendSoloFeedback(.damage)
+            default: break
+            }
+        }
     }
 
     func beginGripCalibration() {
@@ -678,7 +817,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         calibrationError = ""; calibrationAttempt = 0; calibrationSource = source
         calibrationStep = 1
         calibrationMessage = "Hold the \(source) AirPod in your playing grip. Save an upright starting pose."
-        arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput()
+        invalidateAirPodInput()
     }
 
     func cancelGripCalibration() {
@@ -686,7 +825,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         calibrationError = ""
         calibrationMessage = "Calibration cancelled. Your previous grip is unchanged. Recenter before playing."
         calibrated = false
-        arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput()
+        invalidateAirPodInput()
     }
 
     var calibrationAssessment: GripCalibration.TiltAssessment? { calibrationSession?.assessment(at: now) }
@@ -705,7 +844,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         loadingGrip = true; grip = 4; loadingGrip = false
         calibrated = false
         calibrationMessage = "Using saved grip for \(source). Hold upright and press R before playing."
-        arena.invalidateInput(); game.invalidateInput(); tennis.invalidateInput()
+        invalidateAirPodInput()
     }
 
     private func rejectCalibration(_ message: String) {
@@ -800,8 +939,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
             self.interruptCalibration("AirPods disconnected. Reconnect, then choose Start over.")
             self.status = "Headphones disconnected"
             self.calibrated = false
-            self.arena.invalidateInput(); self.game.invalidateInput(); self.tennis.invalidateInput()
-            self.scene.setLive(false)
+            self.invalidateAirPodInput()
             self.event("Headphones disconnected")
         }
     }

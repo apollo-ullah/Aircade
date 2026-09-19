@@ -123,13 +123,12 @@ struct NeonRushView: View {
                         }
                     }
                     Button {
-                        if players.player == nil && !motion.simulated { players.showingSignIn = true }
-                        else if game.inputReady { game.start(demo: motion.simulated) }
+                        if game.inputReady { game.start(demo: motion.activeInputSimulated) }
                         else { showingSetup = true }
                     } label: {
                         HStack {
                             Image(systemName: "play.circle.fill").font(.title2)
-                            Text(players.player == nil && !motion.simulated ? "Scan badge to play" : game.inputReady ? "Let’s play!" : "Connect your controller")
+                            Text(game.inputReady ? (players.player == nil ? "Play as guest" : "Let’s play!") : "Connect your controller")
                             Spacer()
                             Image(systemName: "chevron.right")
                         }.font(.system(size: 18, weight: .bold, design: .default)).padding(.vertical, 6)
@@ -167,7 +166,7 @@ struct NeonRushView: View {
             }.padding(24)
             Spacer(minLength: 0)
             HStack(spacing: 14) {
-                Label(game.inputReady ? "\(motion.controllerName) ready" : "Connect AirPods to get started", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
+                Label(game.inputReady ? "\(motion.activeControllerName) ready" : "Choose an AirPod or iPhone to get started", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 Spacer()
                 Text("Ⓡ  Recenter").foregroundStyle(.secondary)
                 Button("Scripted saber tests") { showingScripts = true }.buttonStyle(SportsButtonStyle())
@@ -266,7 +265,7 @@ struct NeonRushView: View {
         overlayCard {
             Text("Taking a break?").font(.system(size: 42, weight: .bold, design: .default)).italic()
             Text(game.pauseReason).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Label(game.inputReady ? "\(motion.controllerName) ready" : "Waiting for \(motion.controllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
+            Label(game.inputReady ? "\(motion.activeControllerName) ready" : "Waiting for \(motion.activeControllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 .foregroundStyle(game.inputReady ? rushLime : .orange).font(.callout)
             actionButton("Back to the game") { game.resume() }.disabled(!game.inputReady)
             HStack(spacing: 22) {
@@ -295,7 +294,7 @@ struct NeonRushView: View {
             Text(game.state.completed ? "You found your flow. Can you beat it?" : "Keep your cuts deliberate. The next run is yours.")
                 .font(.callout).foregroundStyle(.secondary)
             Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
-            actionButton("Play again") { game.start(demo: motion.simulated) }.disabled(!game.inputReady)
+            actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
                 Button("Back to Aircade") { game.leave() }
                 Button("Next player") { game.leave(); players.nextPlayer() }
@@ -331,7 +330,7 @@ struct NeonRushView: View {
     }
     private var brand: some View { Text("aircade").foregroundStyle(SportsTheme.blue).font(.system(size: 34, weight: .medium, design: .default)).tracking(-1).padding(.trailing, 12) }
     private var connectionPill: some View {
-        ControllerIdentityBadge(motion: motion)
+        ActiveControllerBadge(motion: motion, controllers: motion.controllers)
     }
     private func menuStat(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -373,6 +372,8 @@ private struct ControllerSetupContent: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    ControllerSelectionPanel(motion: motion, controllers: motion.controllers, duel: motion.showingMultiplayer)
+                    if motion.showingMultiplayer || motion.controllers.soloDevice == .airPod {
                     setupStep("01", "Connect your AirPods") {
                         Text("Turn off Automatic Ear Detection. Hold one earbud in a consistent grip.").font(.callout).foregroundStyle(.secondary)
                         HStack {
@@ -422,6 +423,7 @@ private struct ControllerSetupContent: View {
                         }
                     }
                     Text("Keep the earbud secure. Use comfortable wrist or forearm tilts. R recenters your grip; a tracking interruption pauses the game.").font(.caption).foregroundStyle(.secondary)
+                    }
                     Button("Open test lab & diagnostics") { done(); motion.showLab(true) }.buttonStyle(.plain).foregroundStyle(rushLime)
                 }
             }

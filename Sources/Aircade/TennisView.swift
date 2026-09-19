@@ -63,7 +63,7 @@ struct TennisView: View {
                     Button("Scan badge") { players.showingSignIn = true }.buttonStyle(SportsButtonStyle())
                 }
                 Button { NSWorkspace.shared.open(players.leaderboardURL) } label: { Image(systemName: "trophy") }.help("Open leaderboard")
-                ControllerIdentityBadge(motion: motion)
+                ActiveControllerBadge(motion: motion, controllers: motion.controllers)
                 Button { showingSetup = true } label: { Label("Controller", systemImage: "airpodspro") }.buttonStyle(SportsButtonStyle())
             }.padding(.horizontal, 34).padding(.vertical, 20).background(.white.opacity(0.96))
 
@@ -73,7 +73,7 @@ struct TennisView: View {
                         .font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(courtBlue)
                     Text("Tennis").font(.system(size: 52, weight: .bold)).tracking(-2)
                     Text("Keep the rally alive for 60 seconds.").font(.system(size: 19, weight: .medium))
-                    Text("Swing your AirPod like a racket when the ball reaches you. Every valid shot rebounds automatically for now.")
+                    Text("Swing your AirPod or iPhone like a racket. Tilt the face to aim your return; swing faster for a stronger shot.")
                         .font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(4)
                     HStack(spacing: 34) {
                         stat("60", "SECONDS")
@@ -87,13 +87,12 @@ struct TennisView: View {
                         rule("3", "RALLY", "The opponent sends every good shot back automatically.")
                     }
                     Button {
-                        if players.player == nil { players.showingSignIn = true }
-                        else if game.inputReady { game.start() }
+                        if game.inputReady { game.start(demo: motion.activeInputSimulated) }
                         else { showingSetup = true }
                     } label: {
                         HStack {
                             Image(systemName: "play.circle.fill").font(.title2)
-                            Text(players.player == nil ? "Scan badge to play" : game.inputReady ? "Start rally" : "Connect your controller")
+                            Text(game.inputReady ? (players.player == nil ? "Play as guest" : "Start rally") : "Connect your controller")
                             Spacer(); Image(systemName: "chevron.right")
                         }.font(.system(size: 18, weight: .bold)).padding(.vertical, 6)
                     }.buttonStyle(SportsButtonStyle(primary: true))
@@ -110,14 +109,14 @@ struct TennisView: View {
                     Spacer()
                     VStack(alignment: .leading, spacing: 12) {
                         Text("AUTOMATIC OPPONENT").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(courtBlue)
-                        Text("It returns every valid shot with varied timing and placement. The opponent logic is isolated so a model can take over later.")
+                        Text("Keep moving: returns vary in position and get faster as your rally grows.")
                             .font(.callout).foregroundStyle(.secondary)
                     }.padding(20).frame(width: 300).sportsPanel()
                 }.frame(maxWidth: .infinity, alignment: .trailing)
             }.padding(24)
             Spacer(minLength: 0)
             HStack {
-                Label(game.inputReady ? "\(motion.controllerName) ready" : "Connect AirPods to get started", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
+                Label(game.inputReady ? "\(motion.activeControllerName) ready" : "Choose an AirPod or iPhone to get started", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 Spacer(); Text("Ⓡ  Recenter")
             }.font(.system(size: 13, weight: .medium)).padding(.horizontal, 34).padding(.vertical, 16).background(.white.opacity(0.96))
         }
@@ -153,7 +152,7 @@ struct TennisView: View {
         HStack {
             Text("Tennis").font(.system(size: 17, weight: .semibold)).italic()
             Text("AUTOMATIC RETURNER").font(.system(size: 10, weight: .bold)).foregroundStyle(.yellow)
-            Spacer(); ControllerIdentityBadge(motion: motion)
+            Spacer(); ActiveControllerBadge(motion: motion, controllers: motion.controllers)
             Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
             Button { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }.buttonStyle(.plain)
         }.foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 2, y: 1)
@@ -172,7 +171,7 @@ struct TennisView: View {
         card {
             Text("Match paused").font(.system(size: 42, weight: .bold)).italic()
             Text(game.pauseReason).foregroundStyle(.secondary)
-            Label(game.inputReady ? "\(motion.controllerName) ready" : "Waiting for \(motion.controllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
+            Label(game.inputReady ? "\(motion.activeControllerName) ready" : "Waiting for \(motion.activeControllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 .foregroundStyle(game.inputReady ? courtBlue : .orange)
             actionButton("Back to the court") { game.resume() }.disabled(!game.inputReady)
             HStack(spacing: 22) { Button("Controller setup") { showingSetup = true }; Button("End run") { game.leave() } }
@@ -187,7 +186,7 @@ struct TennisView: View {
                 Text(game.state.completed ? game.state.rank : "↻").font(.system(size: 78, weight: .bold)).italic().foregroundStyle(courtBlue)
                 VStack(alignment: .leading) {
                     Text(game.state.score.formatted()).font(.system(size: 52, weight: .bold)).monospacedDigit()
-                    Text(players.bests["Tennis"].map { "YOUR BEST \($0.formatted())" } ?? "SAVING TO YOUR PROFILE")
+                    Text(game.isDemo ? "SIMULATED RUN · NOT SAVED" : players.bests["Tennis"].map { "YOUR BEST \($0.formatted())" } ?? "BEST ON THIS MAC \(game.bestScore.formatted())")
                         .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
                 }
             }
@@ -197,7 +196,7 @@ struct TennisView: View {
                 stat("\(game.state.accuracy)%", "ACCURACY")
             }
             Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
-            actionButton("Play again") { game.start() }.disabled(!game.inputReady)
+            actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
                 Button("Back to Aircade") { game.leave() }
                 Button("Next player") { game.leave(); players.nextPlayer() }

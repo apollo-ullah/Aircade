@@ -29,8 +29,10 @@ final class ArcadeGame: ObservableObject {
     private var feedbackUntil = 0.0
     private var resultSaved = false
     var authorizeRun: (() -> Bool)?
-    var onRunStarted: ((Bool) -> Void)?
-    var onRunFinished: ((NeonRush, Bool) -> Void)?
+    private(set) var runID: String?
+    var onRunStarted: ((Bool) -> String?)?
+    var onRunFinished: ((NeonRush, Bool, String?) -> Bool)?
+    var onRunAbandoned: ((String?) -> Void)?
     var onEvent: ((String) -> Void)?
     var onJudgment: ((RushJudgment) -> Void)?
     var pollInput: (() -> Void)?
@@ -63,7 +65,8 @@ final class ArcadeGame: ObservableObject {
         guard enabled else { return }
         if !demo, let authorizeRun, !authorizeRun() { return }
         guard liveReady else { return }
-        onRunStarted?(demo)
+        if !resultSaved { onRunAbandoned?(runID) }
+        runID = onRunStarted?(demo)
         maxFeedbackSeconds = 0; slowFrames = 0; maxFrameSeconds = 0
         recoveringInput = false; transientInputGaps = 0
         isDemo = demo; resultSaved = false; newRecord = false
@@ -86,9 +89,16 @@ final class ArcadeGame: ObservableObject {
         previousPose = nil; previousTime = nil
     }
     func leave() {
+        if !resultSaved, runID != nil { onRunAbandoned?(runID) }
+        runID = nil
         state.quit(); scene.clearRush(); feedback = ""
         recoveringInput = false
         previousPose = nil; previousTime = nil
+    }
+    func observeSimulatedInput(_ simulated: Bool) {
+        if simulated && (state.phase == .playing || state.phase == .countdown || state.phase == .paused) {
+            isDemo = true
+        }
     }
     func invalidateInput(_ reason: String = "Controller tracking paused. Reconnect or recenter, then resume.") {
         inputReady = false; previousPose = nil; previousTime = nil
@@ -114,6 +124,7 @@ final class ArcadeGame: ObservableObject {
     func update(pose: SaberPose, time: Double, ready: Bool) {
         guard enabled else { return }
         guard ready else { invalidateInput(); return }
+        guard time.isFinite, time >= lastInput else { return }
         inputReady = true; lastInput = time
         guard state.phase == .playing else { previousPose = nil; previousTime = nil; return }
         defer { previousPose = pose; previousTime = time }
@@ -201,8 +212,8 @@ final class ArcadeGame: ObservableObject {
     private func finish() {
         guard !resultSaved else { return }
         resultSaved = true
-        onRunFinished?(state, isDemo)
-        if !isDemo && state.score > bestScore {
+        let eligible = onRunFinished?(state, isDemo, runID) ?? !isDemo
+        if eligible && !isDemo && state.score > bestScore {
             bestScore = state.score; newRecord = true
             scoreDefaults.set(bestScore, forKey: "neonRush.best.\(difficulty.rawValue)")
         }

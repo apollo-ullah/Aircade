@@ -26,7 +26,7 @@ struct MultiplayerView: View {
                 HStack(alignment: .top) {
                     player(.one, name: duel.localName, color: SportsTheme.blue)
                     Spacer()
-                    player(.two, name: duel.scripted ? "Scripted orange" : "iPhone", color: .orange)
+                    player(.two, name: duel.name(.two), color: .orange)
                 }.padding(24)
                 Spacer()
                 if !duel.feedback.isEmpty {
@@ -54,7 +54,7 @@ struct MultiplayerView: View {
             if duel.match.phase == .results { results }
         }.foregroundStyle(SportsTheme.ink).tint(SportsTheme.blue)
             .sheet(isPresented: $setup) { ControllerSetupView(motion: motion, done: { setup = false }) }
-            .onChange(of: setup) { if setup { duel.pause("Player 1 controller setup is open.") } }
+            .onChange(of: setup) { if setup { duel.pause("Controller setup is open.") } }
     }
     private func player(_ slot: PlayerSlot, name: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -75,24 +75,10 @@ struct MultiplayerView: View {
             Label("BETTER WITH A RIVAL", systemImage: "person.2.fill").font(.caption.bold()).foregroundStyle(SportsTheme.blue)
             Text("Your couch. Your arena.").font(.system(size: 32, weight: .bold)).italic()
             Text("Two independent controllers. One shared screen.").foregroundStyle(.secondary)
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Label("1 · AirPod", systemImage: "airpodspro").font(.title3.bold()).foregroundStyle(SportsTheme.blue)
-                    Text("Hold the earbud named above. Your existing grip calibration works here.").font(.callout)
-                    Button("Set up player 1") { setup = true }.buttonStyle(SportsButtonStyle())
-                }.frame(width: 225)
-                Divider()
-                VStack(alignment: .leading, spacing: 10) {
-                    Label("2 · iPhone", systemImage: "iphone").font(.title3.bold()).foregroundStyle(.orange)
-                    Text("Open Aircade Controller, select this Mac, and enter:").font(.callout)
-                    Text(duel.code).font(.system(size: 34, weight: .bold, design: .monospaced)).tracking(5).textSelection(.enabled)
-                    Text(duel.phoneStatus).font(.caption).foregroundStyle(.secondary)
-                    Text(duel.networkStatus).font(.caption).foregroundStyle(.secondary)
-                    Button("Pair a different phone") { duel.forgetPhone() }.buttonStyle(.plain).font(.caption).foregroundStyle(SportsTheme.blue)
-                }.frame(width: 255)
-            }.fixedSize(horizontal: false, vertical: true)
-            Divider()
-            Text("Hold the iPhone upright, screen facing you. Tap Recenter on the phone. Tilt its top edge to aim the orange saber.").font(.callout)
+            ControllerSelectionPanel(motion: motion, controllers: motion.controllers, duel: true)
+            Button("AirPod grip setup") { setup = true }.buttonStyle(SportsButtonStyle())
+            Text("Both controllers stay connected when you switch games. Blue attacks right; orange attacks left.")
+                .font(.callout).foregroundStyle(.secondary)
             Button { duel.start() } label: {
                 HStack { Text(duel.bothReady ? "Start duel" : "Waiting for both controllers"); Spacer(); Image(systemName: "arrow.right") }
                     .font(.headline)
@@ -113,7 +99,7 @@ struct MultiplayerView: View {
             Text(duel.match.pauseReason).multilineTextAlignment(.center).foregroundStyle(.secondary)
             Button("Resume duel") { duel.resume() }.buttonStyle(SportsButtonStyle(primary: true)).disabled(!duel.bothReady)
             HStack(spacing: 24) {
-                Button("Player 1 setup") { setup = true }
+                Button("Controller setup") { setup = true }
                 Button("Back to lobby") { duel.lobby() }
             }.buttonStyle(.plain).foregroundStyle(SportsTheme.blue)
         }.padding(35).frame(width: 520).sportsPanel()

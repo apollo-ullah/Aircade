@@ -13,6 +13,7 @@ struct AircadeApp: App {
                 .onAppear {
                     NSApp.setActivationPolicy(.regular)
                     NSApp.activate(ignoringOtherApps: true)
+                    motion.startControllerSession()
                     if CommandLine.arguments.contains("--tennis-preview") { motion.selectSport(.tennis) }
                     if CommandLine.arguments.contains("--calibration-preview") || CommandLine.arguments.contains("--simple-calibration-preview") {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -98,7 +99,7 @@ struct AircadeApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     if motion.showingMultiplayer { motion.multiplayer.close() }
-                    motion.stop(); motion.camera.stop()
+                    motion.shutdownControllerSession(); motion.stop(); motion.camera.stop()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
                     if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") {
@@ -113,7 +114,7 @@ struct AircadeApp: App {
             CommandGroup(after: .newItem) {
                 Button("Recenter Controller") {
                     if motion.showingMultiplayer { motion.multiplayer.pause("Player 1 recentered. Hold both controllers upright, then resume.") }
-                    motion.recenter()
+                    motion.recenterSelectedController()
                 }.keyboardShortcut("r", modifiers: [])
                 Button("Play / Pause") {
                     if motion.showingMultiplayer {
@@ -125,10 +126,10 @@ struct AircadeApp: App {
                     else if motion.showingLab { motion.arena.launchAttack() }
                     else if motion.selectedSport == .tennis {
                         if motion.tennis.state.phase == .paused { motion.tennis.resume() }
-                        else if motion.tennis.state.phase == .menu || motion.tennis.state.phase == .results { motion.tennis.start() }
+                        else if motion.tennis.state.phase == .menu || motion.tennis.state.phase == .results { motion.tennis.start(demo: motion.activeInputSimulated) }
                         else { motion.tennis.pause() }
                     } else if motion.game.state.phase == .paused { motion.game.resume() }
-                    else if motion.game.state.phase == .menu || motion.game.state.phase == .results { motion.game.start(demo: motion.simulated) }
+                    else if motion.game.state.phase == .menu || motion.game.state.phase == .results { motion.game.start(demo: motion.activeInputSimulated) }
                     else { motion.game.pause() }
                 }.keyboardShortcut(.space, modifiers: [])
                 Button("Stop Tracking") { motion.stop() }.keyboardShortcut(".")

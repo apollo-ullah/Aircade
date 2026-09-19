@@ -96,7 +96,7 @@ final class SaberScene {
         scene.rootNode.addChildNode(rushRoot)
         scene.rootNode.addChildNode(tennisRoot)
         scene.rootNode.addChildNode(arcadeEnvironment)
-        let ball = SCNSphere(radius: 0.15)
+        let ball = SCNSphere(radius: CGFloat(RacketDimensions.ballRadius))
         ball.segmentCount = 24
         ball.firstMaterial?.diffuse.contents = NSColor(calibratedRed: 0.78, green: 0.9, blue: 0.12, alpha: 1)
         ball.firstMaterial?.emission.contents = NSColor(calibratedRed: 0.12, green: 0.16, blue: 0.01, alpha: 1)
@@ -228,21 +228,24 @@ final class SaberScene {
         let shaftNode = SCNNode(geometry: shaft)
         shaftNode.position.y = 0.35
         tennisEquipment.addChildNode(shaftNode)
-        let frame = SCNTorus(ringRadius: 0.53, pipeRadius: 0.055)
+        let frame = SCNTorus(ringRadius: CGFloat(RacketDimensions.frameRadius), pipeRadius: CGFloat(RacketDimensions.frameTubeRadius))
         frame.ringSegmentCount = 48
         frame.pipeSegmentCount = 12
         frame.materials = [racketMaterial]
         let frameNode = SCNNode(geometry: frame)
-        frameNode.position.y = 1.17
+        frameNode.simdPosition = RacketDimensions.faceCenter
         frameNode.eulerAngles.x = .pi / 2
-        frameNode.scale = SCNVector3(0.76, 1, 1.13)
+        frameNode.simdScale = RacketDimensions.frameScale
         tennisEquipment.addChildNode(frameNode)
-        for offset in stride(from: -0.36 as Float, through: 0.36, by: 0.12) {
-            tennisEquipment.addChildNode(lineNode(from: SIMD3<Float>(offset, 0.66, 0), to: SIMD3<Float>(offset, 1.68, 0), radius: 0.008, color: .white))
+        let half = SIMD2<Float>(RacketDimensions.faceHalfWidth, RacketDimensions.faceHalfHeight)
+        let center = RacketDimensions.faceCenter
+        for offset in stride(from: -half.x + 0.06, through: half.x - 0.05, by: 0.10) {
+            let height = half.y * sqrt(max(0, 1 - pow(offset / half.x, 2)))
+            tennisEquipment.addChildNode(lineNode(from: center + SIMD3<Float>(offset, -height, 0), to: center + SIMD3<Float>(offset, height, 0), radius: 0.008, color: .white))
         }
-        for offset in stride(from: 0.78 as Float, through: 1.56, by: 0.13) {
-            let width = 0.46 * sqrt(max(0.05, 1 - pow((offset - 1.17) / 0.58, 2)))
-            tennisEquipment.addChildNode(lineNode(from: SIMD3<Float>(-width, offset, 0), to: SIMD3<Float>(width, offset, 0), radius: 0.008, color: .white))
+        for offset in stride(from: -half.y + 0.06, through: half.y - 0.05, by: 0.11) {
+            let width = half.x * sqrt(max(0, 1 - pow(offset / half.y, 2)))
+            tennisEquipment.addChildNode(lineNode(from: center + SIMD3<Float>(-width, offset, 0), to: center + SIMD3<Float>(width, offset, 0), radius: 0.008, color: .white))
         }
     }
     func setSport(_ sport: AircadeSport) {

@@ -14,6 +14,12 @@ public struct TennisBallFlight {
     public let direction: TennisBallDirection
     public var arrival: Double { born + duration }
 
+    public init(id: Int = 0, born: Double, duration: Double, from: SIMD3<Float>, to: SIMD3<Float>,
+                arcHeight: Float, direction: TennisBallDirection) {
+        self.id = id; self.born = born; self.duration = duration
+        self.from = from; self.to = to; self.arcHeight = arcHeight; self.direction = direction
+    }
+
     public func position(at time: Double) -> SIMD3<Float> {
         let progress = Float(min(1, max(0, (time - born) / duration)))
         let linear = simd_mix(from, to, SIMD3<Float>(repeating: progress))
