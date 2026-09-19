@@ -6,6 +6,24 @@ import MotionCore
 /// These checks submit controller poses through TennisGame.update; they never call
 /// TennisMatch.playerHit or mutate a score. Each rig owns its clock and score store.
 final class TennisIntegrationTests: XCTestCase {
+    func testNormalRallyRemainsRankableAndPracticeIsOptIn() {
+        let rig = Rig(demo: false)
+        XCTAssertFalse(rig.game.codexPractice)
+        XCTAssertFalse(rig.game.manualOpponentEnabled)
+        XCTAssertFalse(rig.game.state.assistedOpponent)
+        XCTAssertFalse(rig.game.isDemo)
+        XCTAssertEqual(rig.starts, [false])
+
+        rig.game.leave()
+        rig.game.codexPractice = true
+        rig.game.update(pose: rig.parked, time: rig.clock.time, ready: true)
+        rig.game.start(demo: false)
+        XCTAssertTrue(rig.game.manualOpponentEnabled)
+        XCTAssertTrue(rig.game.state.assistedOpponent)
+        XCTAssertTrue(rig.game.isDemo)
+        XCTAssertEqual(rig.starts, [false, true])
+    }
+
     final class Clock { var time = 100.0 }
 
     final class Rig {

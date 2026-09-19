@@ -67,7 +67,7 @@ struct AIChallengeView: View {
                 HStack {
                     MotionButton("Astra · screen") { game.connect(provider: "astra") }
                     MotionButton("Jev · state") { game.connect(provider: "jev") }
-                    MotionButton("GLM · tactical") { tennis.leave() }
+                    MotionButton("GLM · tactical") { tennis.leave(); tennis.codexPractice = false }
                 }.buttonStyle(WiiButtonStyle())
                 Text("Astra sees images. Jev receives measured positions. GLM's rally mode uses assisted interception.").font(.caption).multilineTextAlignment(.center)
                 MotionButton("Watch Astra vs Jev") { game.connect(provider: "astra", exhibition: true) }.buttonStyle(WiiButtonStyle())

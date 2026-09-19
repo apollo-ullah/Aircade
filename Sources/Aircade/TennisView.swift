@@ -13,7 +13,7 @@ struct TennisView: View {
     var body: some View {
         ZStack {
             SaberView(controller: motion.scene).ignoresSafeArea()
-            if !game.challengeSelected && (game.state.phase == .playing || game.state.phase == .countdown) {
+            if !game.challengeSelected && game.codexPractice && (game.state.phase == .playing || game.state.phase == .countdown) {
                 directOpponentSurface
             }
             if game.challengeSelected {

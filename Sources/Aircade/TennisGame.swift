@@ -13,7 +13,7 @@ final class TennisGame: ObservableObject {
     let challenge: AIChallengeGame
     var displayPhase: TennisPhase { challengeSelected ? challenge.match.phase : state.phase }
     @Published private(set) var state = TennisMatch()
-    @Published var codexPractice = true
+    @Published var codexPractice = false
     @Published var enabled = false
     @Published var inputReady = false
     @Published var feedback = ""
