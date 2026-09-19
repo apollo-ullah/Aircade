@@ -35,6 +35,7 @@ extension Notification.Name {
     /// Posted by the shell when a flick should click at the cursor's position.
     /// The grid owns hover state, so it is the thing that can act on it.
     static let wiiPointerFlick = Notification.Name("WiiPointerFlick")
+    static let wiiRouteRequest = Notification.Name("WiiRouteRequest")
 }
 
 /// Reports each tile's frame up to the grid so the cursor can be hit-tested

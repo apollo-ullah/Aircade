@@ -581,13 +581,17 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     }
 
 
-    func showLab(_ visible: Bool) {
+    func showLab(_ visible: Bool, notify: Bool = true) {
         game.leave()
         showingLab = visible
         game.enabled = !visible
         arena.enabled = visible
         if visible { arena.reset() }
         scene.setArcadeVisible(!visible)
+        if notify {
+            NotificationCenter.default.post(name: .wiiRouteRequest,
+                                            object: visible ? Route.lab : Route.home)
+        }
     }
 
     func startCamera() {
