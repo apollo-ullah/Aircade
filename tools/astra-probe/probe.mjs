@@ -114,8 +114,9 @@ export async function request(key,body) {
 export function tokenEstimate(usage) {
   if (!usage || !Number.isFinite(usage.input_tokens) || !Number.isFinite(usage.output_tokens)) return null;
   const cached=usage.input_tokens_details?.cached_tokens||0;
+  const written=usage.input_tokens_details?.cache_write_tokens||0;
   // Standard short-context rates checked 2026-09-19. Estimate only, not a billing receipt.
-  return ((usage.input_tokens-cached)*10+cached+usage.output_tokens*50)/1e6;
+  return ((usage.input_tokens-cached-written)*10+cached+written*12.5+usage.output_tokens*50)/1e6;
 }
 
 export function summarize(values) {

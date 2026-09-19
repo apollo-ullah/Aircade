@@ -23,6 +23,7 @@ test('uses the requested Astra model and computer tool with bounded output',()=>
 });
 test('estimates cached and uncached token charges without calling it an invoice',()=>{
   assert.equal(tokenEstimate({input_tokens:1000,input_tokens_details:{cached_tokens:500},output_tokens:100}),.0105);
+  assert.equal(tokenEstimate({input_tokens:1000,input_tokens_details:{cached_tokens:500,cache_write_tokens:400},output_tokens:100}),.0115);
   assert.equal(tokenEstimate(undefined),null);
   assert.deepEqual(summarize([40,10,30,20]),{count:4,median:25,p95:40,min:10,max:40});
 });

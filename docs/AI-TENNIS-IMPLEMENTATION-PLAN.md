@@ -1,8 +1,8 @@
 # Aircade: AI Tennis implementation plan
 
-Status: Phase 0 probe implemented on `codex/astra-phase-zero`; live API acceptance is blocked on `OPENAI_API_KEY`. Phases 1–6 remain planned. Prepared September 19, 2026 against the published `f7d6af2` release. Estimates below are timeboxes for a hackathon implementation, not delivery guarantees.
+Status: Phase 0 passed three live Astra screenshot/action/screenshot trials on `codex/astra-phase-zero`. Phases 1–6 remain planned. Prepared September 19, 2026 against the published `f7d6af2` release. Estimates below are timeboxes for a hackathon implementation, not delivery guarantees.
 
-Phase 0 local evidence: seven automated checks pass, including a mocked Responses round trip through real browser input, and three scripted target trials pass. These are not live Astra results. Run `npm run probe --prefix tools/astra-probe` after adding the key to the ignored root `.env`; see `tools/astra-probe/README.md` for prerequisites, caps and evidence files.
+Phase 0 evidence: seven automated checks and three scripted target trials pass. Separately, the live API run on September 19 at 22:19 UTC passed all three trials using nine requests to `gpt-6-astra`. Median completed-request latency was 3,100 ms; screenshot-to-action latencies were 3,427 / 3,345 / 2,256 ms. Each fresh trial also incurred a preliminary screenshot request, so these action measurements exclude session startup and final confirmation. See `docs/ASTRA-PHASE-ZERO-RESULTS.md`. Normal-speed live tennis remains unproven; begin Phase 1 with manual controls and use the measured latency to choose an explicitly labelled experimental speed in Phase 2.
 
 ## Product outcome
 
