@@ -14,22 +14,22 @@ struct BadgeSignInView: View {
                 Button("Cancel") { players.showingSignIn = false }.disabled(players.busy)
             }
             if let player = players.player {
-                Label("Badge recognized", systemImage: "checkmark.circle.fill").foregroundStyle(SportsTheme.green)
+                Label("Badge recognized", systemImage: "checkmark.circle.fill").foregroundStyle(Color(red: 0.24, green: 0.63, blue: 0.18))
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("YOUR HIGH SCORES").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(2).foregroundStyle(SportsTheme.blue)
+                    Text("YOUR HIGH SCORES").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(2).foregroundStyle(WiiTheme.accentDeep)
                     HStack(spacing: 36) {
                         profileBest("Arcade", players.bests["Arcade"])
                         profileBest("Chill", players.bests["Chill"])
                         profileBest("Tennis", players.bests["Tennis"])
                     }
                     Text("These scores are saved to this badge profile in MongoDB.").font(.caption).foregroundStyle(.secondary)
-                }.padding(16).frame(maxWidth: .infinity, alignment: .leading).sportsPanel()
-                if players.suggestedName != nil { Text("Read from your badge — please confirm the spelling.").font(.caption).foregroundStyle(SportsTheme.blue) }
+                }.padding(16).frame(maxWidth: .infinity, alignment: .leading).wiiPanel()
+                if players.suggestedName != nil { Text("Read from your badge — please confirm the spelling.").font(.caption).foregroundStyle(WiiTheme.accentDeep) }
                 TextField("Name or nickname (2–24 characters)", text: $nickname).textFieldStyle(.roundedBorder)
                 Toggle("Show my nickname and scores on the public leaderboard", isOn: $isPublic)
                 Text("Your badge QR is never shown publicly. Anyone viewing the leaderboard can see opted-in nicknames and results.").font(.caption).foregroundStyle(.secondary)
                 Button("Save profile & return to game") { players.saveProfile(nickname: nickname, isPublic: isPublic) }
-                    .buttonStyle(SportsButtonStyle(primary: true)).disabled(players.busy || nickname.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || nickname.count > 24)
+                    .buttonStyle(WiiButtonStyle(primary: true)).disabled(players.busy || nickname.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || nickname.count > 24)
                 Button("Scan a different badge") { players.player = nil; players.suggestedName = nil; code = "" }
                 Text("Player ID: \(player.id.prefix(8))").font(.caption).foregroundStyle(.secondary)
             } else {
@@ -49,7 +49,7 @@ struct BadgeSignInView: View {
             }
             if players.busy { ProgressView().controlSize(.small) }
             Text(players.message).font(.callout).fixedSize(horizontal: false, vertical: true)
-        }.padding(28).frame(width: 580).background(SportsTheme.paper).preferredColorScheme(.light)
+        }.padding(28).frame(width: 580).background(WiiTheme.stageMid).preferredColorScheme(.light)
             .onAppear {
                 scanner.scanBadges = true
                 scanner.status = "Camera off · ready to scan a badge"

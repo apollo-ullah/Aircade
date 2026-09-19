@@ -127,11 +127,7 @@ struct AircadeApp: App {
 struct ContentView: View {
     @ObservedObject var motion: MotionModel
     var body: some View {
-        Group {
-            if motion.showingLab { ArenaLayout(motion: motion, arena: motion.arena, camera: motion.camera) }
-            else if motion.selectedSport == .tennis { TennisView(motion: motion, game: motion.tennis, players: motion.players) }
-            else { NeonRushView(motion: motion, game: motion.game, players: motion.players) }
-        }
+        WiiShell(motion: motion)
     }
 }
 
@@ -140,7 +136,7 @@ struct ArenaLayout: View {
     @ObservedObject var arena: TrainingArena
     @ObservedObject var camera: HandTracker
     @State private var panel = 0
-    private let cyan = SportsTheme.blue
+    private let cyan = WiiTheme.accentDeep
 
     var body: some View {
         VStack(spacing: 0) {
@@ -207,7 +203,7 @@ struct ArenaLayout: View {
                     }
                 }.frame(width: 390)
             }
-        }.background(SportsTheme.paper)
+        }.background(WiiTheme.stageMid)
         .sheet(isPresented: Binding(get: { motion.calibrationStep > 0 }, set: { showing in
             if !showing && motion.calibrationStep > 0 { motion.cancelGripCalibration() }
         })) {
