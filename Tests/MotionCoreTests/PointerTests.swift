@@ -38,9 +38,10 @@ final class PointerTests: XCTestCase {
         XCTAssertEqual(tracker.update(orientation: yaw(70), sampleAge: 0).x, -1, accuracy: 0.001)
     }
 
-    func testTiltingTowardScreenByTheVerticalSpanReachesTheTopEdge() {
+    func testTiltingTowardScreenByTheVerticalSpanReachesTheBottomEdge() {
         var tracker = PointerTracker()
-        XCTAssertEqual(tracker.update(orientation: pitch(13), sampleAge: 0).y, 1, accuracy: 0.01)
+        XCTAssertEqual(tracker.update(orientation: pitch(13), sampleAge: 0).y, -1, accuracy: 0.01)
+        XCTAssertEqual(tracker.update(orientation: pitch(-13), sampleAge: 0).y, 1, accuracy: 0.01)
     }
 
     func testStaleInputMarksThePointerLostAndHoldsItsLastPoint() {

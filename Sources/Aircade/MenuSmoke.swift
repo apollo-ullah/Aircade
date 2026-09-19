@@ -63,7 +63,7 @@ enum MenuSmoke {
             if let target = motion.menu.targets.first(where: { $0.name == steps[step].0 && $0.enabled }), motion.menu.size.width > 0 {
                 let x = Float((target.frame.midX / motion.menu.size.width * 2 - 1) * 22.5 * .pi / 180)
                 let y = Float((1 - target.frame.midY / motion.menu.size.height * 2) * 13 * .pi / 180)
-                q = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: simd_normalize(SIMD3<Float>(tan(x), 1, -tan(y))))
+                q = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: simd_normalize(SIMD3<Float>(tan(x), 1, tan(y))))
             }
         }
         RunLoop.main.add(timer, forMode: .common)

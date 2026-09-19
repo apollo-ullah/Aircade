@@ -28,7 +28,7 @@ final class ControllerMenuTests: XCTestCase {
     private func sample(_ time: Double, point: CGPoint, age: Double = 0) -> ControllerSnapshot {
         let x = Float((point.x * 2 - 1) * 22.5 * .pi / 180)
         let y = Float((1 - point.y * 2) * 13 * .pi / 180)
-        let up = simd_normalize(SIMD3<Float>(tan(x), 1, -tan(y)))
+        let up = simd_normalize(SIMD3<Float>(tan(x), 1, tan(y)))
         return ControllerSnapshot(device: .airPod, controllerID: device, sessionID: session, sequence: UInt64(time * 1000),
             source: "Test AirPod", orientation: simd_quatf(from: SIMD3<Float>(0, 1, 0), to: up), receivedAt: time - age,
             capturedAt: time - age, ready: true, simulated: true)

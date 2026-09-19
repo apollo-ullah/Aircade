@@ -181,7 +181,7 @@ struct ArcadeSettingsView: View {
                                 .buttonStyle(WiiButtonStyle(primary: motion.controllers.menuDevice == device))
                         }
                     }
-                    Text("Lean left/right to move sideways. Tip toward the screen to move up; away to move down. Hold over a button for one second until the ring fills. Move away before selecting it again.")
+                    Text("Lean left/right to move sideways. Tip toward the screen to move down; away to move up. Hold over a button for one second until the ring fills. Move away before selecting it again.")
                         .foregroundStyle(.secondary)
                     HStack {
                         MotionButton("Recenter pointer") { motion.controllers.recenter(motion.controllers.menuDevice) }

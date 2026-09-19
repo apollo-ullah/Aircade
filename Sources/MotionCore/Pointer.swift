@@ -5,8 +5,8 @@ import simd
 ///
 /// Consumes the same reference-relative, grip-corrected quaternion the blade
 /// uses, so grip calibration and recentering apply to the cursor unchanged.
-/// Uses the upright blade axis: the calibrated left tilt (+Z) points left,
-/// and the calibrated forward tilt (-X, toward the screen) points up.
+/// Uses the upright blade axis: the calibrated left tilt (+Z) points left.
+/// A forward tilt (-X, toward the screen) points down; tipping back points up.
 public struct PointerTracker {
     /// Half-width of the pointing cone, in radians.
     public var yawSpan: Double
@@ -29,7 +29,7 @@ public struct PointerTracker {
     public static func angles(_ orientation: simd_quatf) -> (yaw: Double, pitch: Double) {
         let up = orientation.act(SIMD3<Float>(0, 1, 0))
         let yaw = atan2(Double(up.x), Double(up.y))
-        let pitch = atan2(Double(-up.z), Double(up.y))
+        let pitch = atan2(Double(up.z), Double(up.y))
         return (yaw, pitch)
     }
 
