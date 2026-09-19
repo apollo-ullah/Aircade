@@ -85,10 +85,13 @@ The initial prototype had a fixed handle: a sideways hand translation could not 
 ## Troubleshooting
 
 - No data: verify Mac Bluetooth connection, try wearing the earbuds first, then restart tracking. Check Motion & Fitness permission in System Settings → Privacy & Security.
+- Controller setup shows permission, sample count, and update rate. **Reconnect AirPods** creates a fresh motion connection. If Bluetooth is connected but samples stay at zero, disconnect/reconnect the AirPods in Mac Bluetooth settings, briefly wear them, then retry. The app distinguishes a motion-ready controller from Bluetooth availability.
 - Motion available is false: macOS does not currently report a compatible available stream. Reconnect the AirPods; don't mistake simulation for hardware success.
 - Stream stops when removed: test Automatic Ear Detection off and the other earbud's worn/case state. Record results rather than assuming a workaround works.
 - Blade jumps/reversed axes: recenter in the intended grip and choose a grip-axis preset. Switching presets recenters.
 - Rebuilding an ad-hoc-signed app may require granting permission again. A stable development signing identity can be added later.
+
+Motion callbacks run on a dedicated serial queue. A bounded buffer passes the newest reading to the main run loop; readings from stopped sessions are discarded. This prevents the UI queue from holding a backlog of controller input. `latest-status.json` includes motion-service activity, cached sample availability, and errors for connection troubleshooting.
 
 ## Verification
 
