@@ -1,8 +1,8 @@
 import SwiftUI
 import MotionCore
 
-private let rushLime = SportsTheme.blue
-private let rushCream = SportsTheme.ink
+private let rushLime = WiiTheme.accentDeep
+private let rushCream = WiiTheme.ink
 
 struct NeonRushView: View {
     @ObservedObject var motion: MotionModel
@@ -36,7 +36,7 @@ struct NeonRushView: View {
             }
         }
         .foregroundStyle(rushCream)
-        .background(SportsTheme.paper).tint(rushLime)
+        .background(WiiTheme.stageMid).tint(rushLime)
         .sheet(isPresented: $players.showingSignIn, onDismiss: {
             if restoreCamera && motion.useCamera { motion.startCamera() }
             restoreCamera = false
@@ -69,7 +69,7 @@ struct NeonRushView: View {
                 Label("CHOOSE YOUR CHALLENGE", systemImage: "figure.fencing")
                     .font(WiiTheme.display(11, .bold)).tracking(2).foregroundStyle(rushLime)
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text("Neon").foregroundStyle(SportsTheme.ink)
+                    Text("Neon").foregroundStyle(WiiTheme.ink)
                     Text("Rush").foregroundStyle(rushLime).italic()
                 }.font(WiiTheme.display(50)).tracking(-3)
                 Text("A little swing. A whole lot of play.")
@@ -95,7 +95,7 @@ struct NeonRushView: View {
                                 }.font(WiiTheme.display(15, .bold))
                                 Text(difficulty == .chill ? "Find your flow" : "Turn up the challenge").font(WiiTheme.body(11))
                             }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                                .foregroundStyle(game.difficulty == difficulty ? .white : SportsTheme.ink)
+                                .foregroundStyle(game.difficulty == difficulty ? .white : WiiTheme.ink)
                                 .background(game.difficulty == difficulty ? rushLime : Color.white, in: RoundedRectangle(cornerRadius: 6))
                                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(rushLime.opacity(0.35), lineWidth: 1.5))
                         }.buttonStyle(.plain)
@@ -136,7 +136,7 @@ struct NeonRushView: View {
                 else {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Every swing counts.").font(WiiTheme.display(20))
-                        rule("✦", "SLICE", "Green blocks build your combo.", SportsTheme.green)
+                        rule("✦", "SLICE", "Green blocks build your combo.", Color(red: 0.24, green: 0.63, blue: 0.18))
                         rule("→", "FOLLOW", "Blue arrows show the cut direction.", rushLime)
                         rule("×", "AVOID", "Red hazards cost one energy.", .red)
                     }.padding(22).frame(width: 300).wiiPanel()
@@ -179,7 +179,7 @@ struct NeonRushView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("FIND YOUR FLOW").font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundStyle(rushLime)
             Text("1. Connect and calibrate in Controller setup.\n\n2. Wait for blocks to reach you, then sweep your blade through them.\n\n3. Cut in the arrow's direction. Keep your blade away from red × blocks.\n\n4. Five clean cuts increase your multiplier. A miss, wrong cut, or hazard breaks your combo.")
-                .font(.callout).foregroundStyle(SportsTheme.ink.opacity(0.75))
+                .font(.callout).foregroundStyle(WiiTheme.ink.opacity(0.75))
             Button("Got it") { showHowTo = false }.buttonStyle(.bordered)
         }.padding(24).frame(maxWidth: 360).wiiPanel()
     }
@@ -192,14 +192,14 @@ struct NeonRushView: View {
                     Text("×\(game.state.multiplier)").font(.system(size: 24, weight: .bold)).foregroundStyle(Color(red: 0.55, green: 0.88, blue: 1))
                 }
                 Text("\(game.state.combo) consecutive cuts").font(.system(size: 12))
-            }.frame(width: 205, alignment: .leading).scoreboard()
+            }.frame(width: 205, alignment: .leading).wiiReadout()
             Spacer()
             VStack(spacing: 4) {
                 Text(game.state.roundName).font(.system(size: 12, weight: .semibold)).tracking(1)
                 Text(String(format: "%d:%02d", Int(ceil(game.state.remaining)) / 60, Int(ceil(game.state.remaining)) % 60))
                     .font(.system(size: 34, weight: .medium)).monospacedDigit()
                 ProgressView(value: game.state.remaining, total: 60).tint(.white).frame(width: 116)
-            }.scoreboard()
+            }.wiiReadout()
             Spacer()
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 20) {
@@ -214,7 +214,7 @@ struct NeonRushView: View {
                             .frame(width: 18, height: 18)
                     }
                 }
-            }.scoreboard()
+            }.wiiReadout()
         }.foregroundStyle(.white).padding(24)
             .allowsHitTesting(game.state.phase == .playing || game.state.phase == .countdown)
     }
@@ -294,7 +294,7 @@ struct NeonRushView: View {
     }
     private func overlayCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ZStack {
-            SportsTheme.blue.opacity(0.22)
+            WiiTheme.accentDeep.opacity(0.22)
             VStack(spacing: 22, content: content).padding(38).frame(width: 600)
                 .wiiPanel()
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(rushLime.opacity(0.15)))
@@ -399,13 +399,13 @@ private struct ControllerSetupContent: View {
                     Button("Open test lab & diagnostics") { done(); motion.showLab(true) }.buttonStyle(.plain).foregroundStyle(rushLime)
                 }
             }
-        }.padding(26).frame(width: 610, height: 690).background(SportsTheme.paper).preferredColorScheme(.light).tint(rushLime)
+        }.padding(26).frame(width: 610, height: 690).background(WiiTheme.stageMid).preferredColorScheme(.light).tint(rushLime)
     }
     private func setupStep<Content: View>(_ number: String, _ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack { Text(number).foregroundStyle(rushLime).font(.system(size: 12, weight: .bold, design: .monospaced)); Text(title).font(.headline) }
             content()
-        }.padding(17).frame(maxWidth: .infinity, alignment: .leading).sportsPanel()
+        }.padding(17).frame(maxWidth: .infinity, alignment: .leading).wiiPanel()
     }
 }
 

@@ -244,7 +244,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     func startScripted(_ scenario: SaberScript) {
         stop()
         selectedSport = .neonRush
-        showLab(false)
+        showLab(false, notify: false)
         useCamera = false; simulated = true; running = true; calibrated = true
         scriptedScenario = scenario; scriptController = ScriptedSaber(scenario)
         source = "Simulated"; incomingSource = "Simulated"

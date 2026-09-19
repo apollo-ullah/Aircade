@@ -8,7 +8,7 @@ struct TennisView: View {
     @ObservedObject var players: PlayerSession
     @State private var restoreCamera = false
     @State private var showingSetup = false
-    private let courtBlue = SportsTheme.blue
+    private let courtBlue = WiiTheme.accentDeep
 
     var body: some View {
         ZStack {
@@ -32,7 +32,7 @@ struct TennisView: View {
                 if game.state.phase == .results { results }
             }
         }
-        .foregroundStyle(SportsTheme.ink).background(SportsTheme.paper).tint(courtBlue)
+        .foregroundStyle(WiiTheme.ink).background(WiiTheme.stageMid).tint(courtBlue)
         .sheet(isPresented: $players.showingSignIn, onDismiss: {
             if restoreCamera && motion.useCamera { motion.startCamera() }
             restoreCamera = false
@@ -57,14 +57,14 @@ struct TennisView: View {
                 Text("Tennis").fontWeight(.bold).foregroundStyle(courtBlue)
                 Spacer()
                 if let player = players.player {
-                    Button { players.showingSignIn = true } label: { Label(player.nickname, systemImage: "person.crop.circle.fill") }.buttonStyle(SportsButtonStyle())
-                    Button("Log out") { players.logout() }.buttonStyle(SportsButtonStyle())
+                    Button { players.showingSignIn = true } label: { Label(player.nickname, systemImage: "person.crop.circle.fill") }.buttonStyle(WiiButtonStyle())
+                    Button("Log out") { players.logout() }.buttonStyle(WiiButtonStyle())
                 } else {
-                    Button("Scan badge") { players.showingSignIn = true }.buttonStyle(SportsButtonStyle())
+                    Button("Scan badge") { players.showingSignIn = true }.buttonStyle(WiiButtonStyle())
                 }
                 Button { NSWorkspace.shared.open(players.leaderboardURL) } label: { Image(systemName: "trophy") }.help("Open leaderboard")
                 ControllerIdentityBadge(motion: motion)
-                Button { showingSetup = true } label: { Label("Controller", systemImage: "airpodspro") }.buttonStyle(SportsButtonStyle())
+                Button { showingSetup = true } label: { Label("Controller", systemImage: "airpodspro") }.buttonStyle(WiiButtonStyle())
             }.padding(.horizontal, 34).padding(.vertical, 20).background(.white.opacity(0.96))
 
             HStack(alignment: .top, spacing: 26) {
@@ -96,8 +96,8 @@ struct TennisView: View {
                             Text(players.player == nil ? "Scan badge to play" : game.inputReady ? "Start rally" : "Connect your controller")
                             Spacer(); Image(systemName: "chevron.right")
                         }.font(.system(size: 18, weight: .bold)).padding(.vertical, 6)
-                    }.buttonStyle(SportsButtonStyle(primary: true))
-                }.padding(24).frame(width: 450).sportsPanel()
+                    }.buttonStyle(WiiButtonStyle(primary: true))
+                }.padding(24).frame(width: 450).wiiPanel()
 
                 VStack(alignment: .trailing, spacing: 16) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -106,13 +106,13 @@ struct TennisView: View {
                         Text((players.player == nil ? game.bestScore : players.bests["Tennis", default: 0]).formatted())
                             .font(.system(size: 30, weight: .bold)).monospacedDigit().foregroundStyle(courtBlue)
                         Text(players.player == nil ? "Best on this Mac" : "Saved to your badge profile").font(.caption).foregroundStyle(.secondary)
-                    }.padding(16).frame(width: 300, alignment: .leading).sportsPanel()
+                    }.padding(16).frame(width: 300, alignment: .leading).wiiPanel()
                     Spacer()
                     VStack(alignment: .leading, spacing: 12) {
                         Text("AUTOMATIC OPPONENT").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(courtBlue)
                         Text("It returns every valid shot with varied timing and placement. The opponent logic is isolated so a model can take over later.")
                             .font(.callout).foregroundStyle(.secondary)
-                    }.padding(20).frame(width: 300).sportsPanel()
+                    }.padding(20).frame(width: 300).wiiPanel()
                 }.frame(maxWidth: .infinity, alignment: .trailing)
             }.padding(24)
             Spacer(minLength: 0)
@@ -129,14 +129,14 @@ struct TennisView: View {
                 Text("\(players.player?.nickname ?? "Player") · SCORE").font(.system(size: 12, weight: .semibold))
                 Text(game.state.score.formatted()).font(.system(size: 38, weight: .semibold)).monospacedDigit()
                 Text("Rally \(game.state.rally) · Best \(game.state.longestRally)").font(.system(size: 12))
-            }.frame(width: 215, alignment: .leading).scoreboard()
+            }.frame(width: 215, alignment: .leading).wiiReadout()
             Spacer()
             VStack(spacing: 4) {
                 Text("RALLY CHALLENGE").font(.system(size: 11, weight: .semibold)).tracking(1)
                 Text(String(format: "%d:%02d", Int(ceil(game.state.remaining)) / 60, Int(ceil(game.state.remaining)) % 60))
                     .font(.system(size: 34, weight: .medium)).monospacedDigit()
                 ProgressView(value: game.state.remaining, total: TennisMatch.duration).tint(.white).frame(width: 116)
-            }.scoreboard()
+            }.wiiReadout()
             Spacer()
             VStack(alignment: .trailing, spacing: 9) {
                 HStack { Text("BALLS").font(.system(size: 12, weight: .semibold)).tracking(1); Button { game.pause() } label: { Image(systemName: "pause.fill") }.buttonStyle(.plain) }
@@ -145,7 +145,7 @@ struct TennisView: View {
                         Circle().fill(index < game.state.ballsLeft ? Color.yellow : .black.opacity(0.45)).frame(width: 18, height: 18)
                     }
                 }
-            }.scoreboard()
+            }.wiiReadout()
         }.foregroundStyle(.white).padding(24)
     }
 
@@ -209,7 +209,7 @@ struct TennisView: View {
     private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ZStack {
             courtBlue.opacity(0.22)
-            VStack(spacing: 22, content: content).padding(38).frame(width: 600).sportsPanel()
+            VStack(spacing: 22, content: content).padding(38).frame(width: 600).wiiPanel()
         }
     }
     private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {

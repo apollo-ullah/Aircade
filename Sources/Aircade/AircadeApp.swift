@@ -136,7 +136,7 @@ struct ArenaLayout: View {
     @ObservedObject var arena: TrainingArena
     @ObservedObject var camera: HandTracker
     @State private var panel = 0
-    private let cyan = SportsTheme.blue
+    private let cyan = WiiTheme.accentDeep
 
     var body: some View {
         VStack(spacing: 0) {
@@ -203,7 +203,7 @@ struct ArenaLayout: View {
                     }
                 }.frame(width: 390)
             }
-        }.background(SportsTheme.paper)
+        }.background(WiiTheme.stageMid)
         .sheet(isPresented: Binding(get: { motion.calibrationStep > 0 }, set: { showing in
             if !showing && motion.calibrationStep > 0 { motion.cancelGripCalibration() }
         })) {
