@@ -16,24 +16,47 @@ For editing in Xcode, open `Package.swift`; use the script to launch the correct
 ## Play Neon Rush
 
 1. Click **Connect your controller** or **Controller**. Turn off **Automatic Ear Detection**, hold the earbud in your calibrated grip, and click **Start AirPods**.
-2. The saved grip calibration loads for the active earbud. Use the animated three-pose guide if the grip has changed. Hold upright and press **R** to recenter, then close setup.
+2. The controller label identifies the selected earbud. Its saved grip loads automatically. Use grip setup if the grip has changed. Hold upright and press **R** to recenter, then close setup.
 3. Select **Chill** (seven energy, generous windows, free-direction cuts) or **Arcade** (five energy, tighter windows, directional cuts from round two). Click **Let's play**.
 4. After the countdown, wait for blocks to reach your blade. Slice green ✦ blocks in any direction; cut cyan arrows in the indicated direction. Avoid touching red × hazards with the blade. Keep clear of hazards until they disappear.
 5. Every five consecutive cuts raises the score multiplier, up to ×4. Clean fast cuts score 150 base points; other valid cuts score 100. A miss, incorrect arrow cut, or hazard costs one energy and resets the combo.
 6. Survive three 20-second rounds: **Ignite → Flow → Overdrive**. Results show score, rank for completed runs, cuts, best combo, and accuracy. High scores save locally for each difficulty. Replay or return to the launcher.
 
-**Space** pauses/resumes. **R** recenters and pauses an active game; resume when ready. Tracking loss, opening setup, app interruption, and moving the app to the background pause the game without advancing targets. Resume includes a two-second countdown.
+**Space** pauses/resumes. **R** recenters and pauses an active game; resume when ready. Tracking loss, opening setup, and moving the app to the background pause the game without advancing targets. Resume includes a two-second countdown. A slow render/audio frame with fresh input recovers automatically with a bounded time step; it does not open the pause screen or skip through targets.
+
+Brief AirPod packet gaps recover automatically: after 250 ms without motion, the game holds its clock and clears collision history while waiting for a new pose. Same-earbud gaps under one second keep the grip reference and resume without the pause overlay. The first returning pose cannot score a connecting slash. One second without input, an explicit disconnect, or a source change still requires a manual resume; sustained motion loss also requires recentering. Calibration and labelled hardware continuity trials keep their separate stricter continuity rules.
 
 **Watch demo** uses visibly labelled simulated motion and never saves a high score. It is a motion demonstration, not an automated perfect player. To return to physical play, start AirPods again in Controller setup. The game works with AirPod rotation alone; camera tracking adds handle translation.
+
+## Test without AirPods
+
+Choose **Scripted saber tests** at the bottom of the launcher, select a scenario, then **Run scripted test**. The script supplies blade poses through the real collision, scoring, effects, and round code. It never injects scores or successful hits. **Change test** during play (or **Change scripted test** on results) opens the selector; **Use AirPods instead** reconnects real motion with your saved grip.
+
+| Scenario | Expected behavior |
+| --- | --- |
+| Win the full game | Cut blocks, follow arrows, avoid hazards, finish all three rounds. |
+| Stationary contact | Passing blocks do not shatter on a motionless blade. |
+| Slow touch | Contact below cutting speed does not score. |
+| Thrust along blade | A thrust does not count as a slash. |
+| Wrong-way cuts | Reversed arrow cuts cost energy and break the combo. |
+| Hit red hazards | Touching a red block costs energy once. |
+| Miss every block | Five Arcade misses reach the defeat screen. |
+
+Scripted sessions are labelled and do not save high scores or replace grip calibration. **One more run** replays the selected scenario. `open build/Aircade.app --args --scripted-demo` starts an interactive scripted win demo immediately.
 
 ## Calibrate and use the test lab
 
 1. Choose **Open test lab** from the launcher. Disable **Automatic Ear Detection** for your AirPods (the user confirmed this enables handheld streaming on their setup), and click **Start AirPods**.
-2. Keep the earbud fixed in your intended grip. Choose **Calibrate grip — 3 poses**. A large animated guide opens with a wrist pivot, direction arrows, and a dashed target pose. Follow the motion, hold the target pose, then click the save button (or press Return). Replay restarts the illustration; it never captures automatically:
-   - Hold the controller upright and capture neutral.
-   - Tilt its top 30–60° to your left and capture left. Sliding your hand without rotating is not a calibration tilt.
-   - Return to the original upright pose, then tilt its top 30–60° away from you and capture forward.
-3. Return upright and press **R**. The resulting rotation basis is saved locally per source earbud. Repeat when the earbud's mounting within your grip changes.
+2. Check the large **L / LEFT AIRPOD** or **R / RIGHT AIRPOD** badge in **SIMPLE CALIBRATION**. This names the earbud being calibrated, not the hand holding it or the tilt direction. Hold the earbud marked L/R in either hand. The same controller badge appears on the home screen, during play, in setup, and in the lab. The app currently uses the early three-capture flow:
+   - Hold your imaginary handle upright and click **Save upright**.
+   - Lean it left and click **Save left tilt**. A small tilt is accepted.
+   - Return upright, then tip toward the screen and click **Save forward & finish**.
+3. Each click captures the latest live pose immediately. There is no 30° target, steady-hold timer, explicit return gate, or preview stage. Wrist or forearm movement is fine; keep the AirPod fixed in your fingers. Only stale/mismatched sensor data, zero rotation, or indistinguishable tilt axes prevent a usable mapping. Return upright and press **R** after saving. Cancelling leaves the previous mapping saved.
+
+The newer five-step flow is retained but disabled by `MotionModel.useSimpleCalibration = true`. The simple version uses the original three-pose structure from the earliest available commit (`de883fd`, 06:40) with its angle acceptance gates removed; there is no separate 05:45 commit. Launch `open build/Aircade.app --args --simple-calibration` to open the test lab and automatically show simple setup when live motion arrives.
+
+macOS chooses which earbud supplies this Core Motion stream. Aircade pins the first known source and shows **selected** and **reported** earbuds separately if they differ. In setup, the lab, or the calibration sheet, **Use [earbud] instead** explicitly adopts the reported source and restarts calibration. This button does not command macOS to select a hardware sensor. Moving the other connected earbud cannot calibrate the selected one.
+
 4. In **Slash lab**, sweep the blade through the block. Choose Any/Left/Right/Down cuts. Cuts split the block, create sparks and a short trail, play sound, and score. Blocks respawn after 0.85 seconds. Sound can be muted.
 5. In **Parry drill**, press **Space** (or Launch attack). Place your blade along the green ghost. An orange attack arrives after 1.8 seconds; matching position and blade angle within ±180 ms of impact parries it. Wrong position/angle/timing counts as a miss. Tracking loss cancels the attack without penalizing you.
 
@@ -100,9 +123,13 @@ swift test
 ./scripts/build.sh
 open -n build/Aircade.app --args --smoke-test
 open -n build/Aircade.app --args --game-smoke-test
+open -n build/Aircade.app --args --scripted-game-test
+open -n build/Aircade.app --args --scripted-repro
 ```
 
 Run smoke checks separately with other Aircade instances closed. The lab check animates synthetic data, captures `scene-smoke.png` in the log directory, writes `smoke-result.txt`, and exits. The game check captures launcher, gameplay, pause, and results, exercises real geometric cuts with simulated motion, verifies demo scores are not saved, writes `game-smoke-result.txt`, and exits. Native UI bitmaps and SceneKit snapshots are captured separately. Neither check verifies real hardware.
+
+The two scripted checks keep sound and visual effects enabled, verify full victory or defeat respectively, write `scripted-win-result.json` / `scripted-repro-result.json`, capture results, and exit. These unattended checks bypass background-focus pausing only for those two command-line flags. Normal interactive play still pauses when the app loses focus. `swift test` also exercises light contacts, wrong-direction cuts, hazards, replay, slow-frame recovery, and genuine tracking loss through the production game wrapper.
 
 Hardware verification remains pending until an actual labelled handheld trial succeeds. Build and unit tests cannot establish that the user's AirPods stream while held.
 
