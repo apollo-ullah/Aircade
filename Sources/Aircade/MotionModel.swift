@@ -89,8 +89,9 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     let camera = HandTracker()
     let scene = SaberScene()
     lazy var arena = TrainingArena(scene: scene)
-    lazy var game = ArcadeGame(scene: scene, clock: { [weak self] in self?.now ?? ProcessInfo.processInfo.systemUptime })
-    lazy var tennis = TennisGame(scene: scene, clock: { [weak self] in self?.now ?? ProcessInfo.processInfo.systemUptime })
+    private let scoreDefaults: UserDefaults
+    lazy var game = ArcadeGame(scene: scene, clock: { [weak self] in self?.now ?? ProcessInfo.processInfo.systemUptime }, scoreDefaults: scoreDefaults)
+    lazy var tennis = TennisGame(scene: scene, clock: { [weak self] in self?.now ?? ProcessInfo.processInfo.systemUptime }, scoreDefaults: scoreDefaults)
     private var customBasis: simd_quatf?
     // Temporarily bypass the newer calibration at the user's request. Retained below
     // for comparison; the live app defaults to three instantaneous manual captures.
@@ -135,7 +136,8 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         self.init(logDirectory: ProcessInfo.processInfo.environment["AIRCADE_LOG_DIRECTORY"].map { URL(fileURLWithPath: $0, isDirectory: true) })
     }
 
-    init(logDirectory customLogDirectory: URL?) {
+    init(logDirectory customLogDirectory: URL?, scoreDefaults: UserDefaults = .standard) {
+        self.scoreDefaults = scoreDefaults
         logDirectory = customLogDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Aircade/Logs", isDirectory: true)
         players = customLogDirectory.map {
