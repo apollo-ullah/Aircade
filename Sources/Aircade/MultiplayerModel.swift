@@ -95,6 +95,7 @@ final class MultiplayerModel: ObservableObject {
         }
         let now = clock()
         var poses: [SaberPose?] = [nil, nil]
+        var sampleTimes: [Double?] = [nil, nil]
         if scripted {
             ready = [true, true]
             // Player 1 makes broad swings; player 2 holds their blade out of the way.
@@ -108,6 +109,7 @@ final class MultiplayerModel: ObservableObject {
                 ready[player.rawValue] = sample?.isFresh(at: now) == true && sample?.simulated == false
                 if ready[player.rawValue], let orientation = sample?.orientation {
                     poses[player.rawValue] = SaberDuel.pose(player, orientation)
+                    sampleTimes[player.rawValue] = sample?.capturedAt
                 }
             }
         }
@@ -115,7 +117,7 @@ final class MultiplayerModel: ObservableObject {
             scene.update(player, pose: poses[player.rawValue], ready: ready[player.rawValue])
         }
         let oldPhase = match.phase
-        let events = match.step(at: now, poses: poses)
+        let events = match.step(at: now, poses: poses, sampleTimes: scripted ? nil : sampleTimes)
         for event in events {
             scene.impact(event)
             if event.kind == .clash {

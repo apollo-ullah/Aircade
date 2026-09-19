@@ -93,4 +93,97 @@ final class SaberDuelTests: XCTestCase {
         phone.recenter(initial * left)
         XCTAssertLessThan(abs(phone.calibrated(initial * left)!.angle), 0.001)
     }
+
+    private func sampledStroke(sampleHz: Double, renderHz: Double, duration: Double,
+                               guardQ: simd_quatf? = nil) -> (SaberDuel, [SaberDuel.Event]) {
+        var game = SaberDuel(), time = 100.0
+        begin(&game, &time, guardQ: guardQ)
+        let start = time
+        var events: [SaberDuel.Event] = []
+        for frame in 1...Int((duration + 0.4) * renderHz) {
+            let elapsed = Double(frame) / renderHz
+            let sample = floor(elapsed * sampleHz + 0.0000001) / sampleHz
+            let angle = -Float(min(1, sample / duration)) * 1.15
+            time = start + elapsed
+            events += game.step(at: time, poses: poses(angle, guardQ: guardQ), sampleTimes: [start + sample, time])
+        }
+        return (game, events)
+    }
+
+    func testSparseSamplesHaveSameHitQualificationAtDifferentRenderRates() {
+        for sampleHz in [30.0, 60.0] {
+            for renderHz in [60.0, 120.0] {
+                let (fast, fastEvents) = sampledStroke(sampleHz: sampleHz, renderHz: renderHz, duration: 0.3)
+                XCTAssertEqual(fast.health, [5, 4], "Fast swing at sample \(sampleHz), render \(renderHz)")
+                XCTAssertEqual(fastEvents.filter { $0.kind == .hit }.count, 1)
+                let (slow, slowEvents) = sampledStroke(sampleHz: sampleHz, renderHz: renderHz, duration: 3)
+                XCTAssertEqual(slow.health, [5, 5], "Sparse slow input must not become a fast render-timed swing")
+                XCTAssertTrue(slowEvents.isEmpty)
+                XCTAssertEqual(slow.elapsed - fast.elapsed, 2.7, accuracy: 1 / renderHz + 0.00001,
+                               "Match time still advances with rendering, independent of source sampling")
+            }
+        }
+    }
+
+    func testClashUsesEachPlayersSampleIntervalAtDifferentRenderRates() {
+        for sampleHz in [30.0, 60.0] {
+            for renderHz in [60.0, 120.0] {
+                let (fast, fastEvents) = sampledStroke(sampleHz: sampleHz, renderHz: renderHz, duration: 0.3, guardQ: upright)
+                XCTAssertTrue(fastEvents.contains { $0.kind == .clash })
+                XCTAssertFalse(fastEvents.contains { $0.kind == .hit })
+                XCTAssertEqual(fast.health, [5, 5])
+                let (_, slowEvents) = sampledStroke(sampleHz: sampleHz, renderHz: renderHz, duration: 3, guardQ: upright)
+                XCTAssertTrue(slowEvents.isEmpty, "Slow sparse input must not manufacture a fast clash")
+            }
+        }
+    }
+
+    func testDuplicateAndOlderSamplesCannotMoveBaselineOrDamage() {
+        var game = SaberDuel(), time = 100.0
+        begin(&game, &time)
+        let sampleTime = time
+        // Both a changed pose attached to the same timestamp and an older packet
+        // must be ignored, even though a render-time sweep would cross the target.
+        time += 1 / 120
+        XCTAssertTrue(game.step(at: time, poses: poses(-1.15), sampleTimes: [sampleTime, time]).isEmpty)
+        time += 1 / 120
+        XCTAssertTrue(game.step(at: time, poses: poses(-1.15), sampleTimes: [sampleTime - 0.01, time]).isEmpty)
+        time += 1 / 120
+        XCTAssertTrue(game.step(at: time, poses: poses(), sampleTimes: [time, time]).isEmpty,
+                      "Ignored samples must not poison the next honest baseline")
+        XCTAssertEqual(game.health, [5, 5])
+        let legitimate = time
+        time += 0.03
+        XCTAssertEqual(game.step(at: time, poses: poses(-1.15), sampleTimes: [time, time]).filter { $0.kind == .hit }.count, 1)
+        let hitSample = time
+        for _ in 0..<10 {
+            time += 1 / 120
+            XCTAssertTrue(game.step(at: time, poses: poses(), sampleTimes: [legitimate, time]).isEmpty)
+            time += 1 / 120
+            XCTAssertTrue(game.step(at: time, poses: poses(-1.15), sampleTimes: [hitSample, time]).isEmpty)
+        }
+        XCTAssertEqual(game.health, [5, 4])
+    }
+
+    func testSparseSampleHistoryResetsAcrossLossAndRecenterPause() {
+        var game = SaberDuel(), time = 100.0
+        begin(&game, &time)
+        let oldSample = time, elapsed = game.elapsed
+        time += 0.30
+        XCTAssertTrue(game.step(at: time, poses: poses(-1.15), sampleTimes: [oldSample, time]).isEmpty)
+        XCTAssertTrue(game.recovering)
+        XCTAssertEqual(game.elapsed, elapsed)
+        time += 1 / 60
+        XCTAssertTrue(game.step(at: time, poses: poses(-1.15), sampleTimes: [time, time]).isEmpty)
+        XCTAssertFalse(game.recovering); XCTAssertEqual(game.health, [5, 5])
+        game.pause("Controller recentered")
+        time += 1
+        XCTAssertTrue(game.step(at: time, poses: poses(), sampleTimes: [time, time]).isEmpty)
+        game.resume()
+        for _ in 0..<185 {
+            time += 1 / 60
+            XCTAssertTrue(game.step(at: time, poses: poses(), sampleTimes: [time, time]).isEmpty)
+        }
+        XCTAssertEqual(game.phase, .playing); XCTAssertEqual(game.health, [5, 5])
+    }
 }

@@ -19,6 +19,7 @@ public struct SaberDuel {
     public private(set) var pauseReason = ""
     public var remaining: Double { max(0, 60 - elapsed) }
     private var previous: [SaberPose]?
+    private var previousSampleTimes: [Double]?
     private var lastTime: Double?
     private var missingSince: Double?
     private var latched = [false, false]
@@ -41,33 +42,53 @@ public struct SaberDuel {
     }
     public mutating func pause(_ reason: String) {
         guard phase == .playing || phase == .countdown else { return }
-        phase = .paused; pauseReason = reason; previous = nil; lastTime = nil
+        phase = .paused; pauseReason = reason; previous = nil; previousSampleTimes = nil; lastTime = nil
     }
     public mutating func resume() {
         guard phase == .paused else { return }
-        phase = .countdown; countdown = 3; previous = nil; lastTime = nil; missingSince = nil; recovering = false
+        phase = .countdown; countdown = 3; previous = nil; previousSampleTimes = nil; lastTime = nil; missingSince = nil; recovering = false
     }
 
     /// A missing pose freezes time and clears sweep history. Reconnection never
     /// draws a damaging sweep through the gap or advances the match clock.
-    public mutating func step(at time: Double, poses: [SaberPose?]) -> [Event] {
-        guard time.isFinite, poses.count == 2 else { return [] }
+    /// sampleTimes are host-monotonic capture estimates, not peer uptimes. A
+    /// render tick may reuse a sample, but cannot shorten its measured swing.
+    /// Omit them for generated poses whose sample clock is the render clock.
+    public mutating func step(at time: Double, poses: [SaberPose?], sampleTimes: [Double?]? = nil) -> [Event] {
+        guard time.isFinite, poses.count == 2, sampleTimes == nil || sampleTimes?.count == 2 else { return [] }
         let dt = lastTime.map { time - $0 } ?? 0
         guard dt >= 0 else { return [] }
         lastTime = time
-        guard phase == .countdown || phase == .playing else { previous = nil; return [] }
-        guard let first = poses[0], let second = poses[1] else {
-            previous = nil; recovering = true
+        guard phase == .countdown || phase == .playing else { previous = nil; previousSampleTimes = nil; return [] }
+        let timestamps = sampleTimes ?? [time, time]
+        guard let first = poses[0], let second = poses[1],
+              let firstTime = timestamps[0], let secondTime = timestamps[1],
+              firstTime.isFinite, secondTime.isFinite,
+              firstTime <= time, secondTime <= time,
+              time - firstTime < 0.25, time - secondTime < 0.25 else {
+            previous = nil; previousSampleTimes = nil; recovering = true
             if missingSince == nil { missingSince = time }
             if time - (missingSince ?? time) >= 1 {
                 pause("Controller disconnected. Restore both controllers, then resume.")
             }
             return []
         }
-        let current = [first, second]
-        if recovering { recovering = false; missingSince = nil; previous = current; return [] }
-        defer { previous = current }
-        guard dt > 0, dt <= 0.15, let old = previous else { return [] }
+        var current = [first, second], acceptedTimes = [firstTime, secondTime]
+        if recovering {
+            recovering = false; missingSince = nil; previous = current; previousSampleTimes = acceptedTimes
+            return []
+        }
+        defer { previous = current; previousSampleTimes = acceptedTimes }
+        guard let old = previous, let oldTimes = previousSampleTimes else { return [] }
+        var sampleIntervals = [0.0, 0.0]
+        for i in 0..<2 {
+            if acceptedTimes[i] > oldTimes[i] { sampleIntervals[i] = acceptedTimes[i] - oldTimes[i] }
+            else {
+                // Ignore even a different orientation if its timestamp is not newer.
+                current[i] = old[i]; acceptedTimes[i] = oldTimes[i]
+            }
+        }
+        guard dt > 0, dt <= 0.15 else { return [] }
         if phase == .countdown {
             countdown = max(0, countdown - dt)
             if countdown == 0 { phase = .playing }
@@ -77,21 +98,24 @@ public struct SaberDuel {
         for i in 0..<2 { cooldown[i] = max(0, cooldown[i] - dt) }
         var events: [Event] = []
         // Check both moving blades, including the arc between samples.
-        if let point = Self.clash(from: old, to: current, dt: dt) {
+        let moved = sampleIntervals.map { $0 > 0 && $0 <= 0.15 }
+        // A long per-device gap establishes a new baseline, not a catch-up stroke.
+        let sweepStart = (0..<2).map { moved[$0] ? old[$0] : current[$0] }
+        if let point = Self.clash(from: sweepStart, to: current, sampleIntervals: sampleIntervals) {
             if !touchingBlades && (cooldown.max() ?? 0) == 0 {
                 events.append(Event(kind: .clash, player: .one, point: point))
                 cooldown = [0.32, 0.32]
             }
             touchingBlades = true
-        } else { touchingBlades = false }
+        } else if moved.contains(true) { touchingBlades = false }
         for player in PlayerSlot.allCases {
             let i = player.rawValue
             let target = Self.target(player.other)
             let overlaps = CombatGeometry.segmentBox(from: current[i].point(0.12), to: current[i].point(CombatGeometry.bladeLength),
                 center: target, half: Self.targetHalf + SIMD3(repeating: 0.045)) != nil
             if !overlaps && cooldown[i] == 0 { latched[i] = false }
-            guard !latched[i], cooldown[i] == 0,
-                  let contact = CombatGeometry.sweep(from: old[i], to: current[i], dt: dt, center: target, half: Self.targetHalf),
+            guard moved[i], !latched[i], cooldown[i] == 0,
+                  let contact = CombatGeometry.sweep(from: old[i], to: current[i], dt: sampleIntervals[i], center: target, half: Self.targetHalf),
                   contact.speed >= 1.4, contact.cuttingAlignment >= 0.35 else { continue }
             health[player.other.rawValue] = max(0, health[player.other.rawValue] - 1)
             latched[i] = true; cooldown[i] = 0.55
@@ -104,11 +128,14 @@ public struct SaberDuel {
         return events
     }
 
-    private static func clash(from old: [SaberPose], to current: [SaberPose], dt: Double) -> SIMD3<Float>? {
+    private static func clash(from old: [SaberPose], to current: [SaberPose], sampleIntervals: [Double]) -> SIMD3<Float>? {
         let travel = (0..<2).map { i in
             2 * acos(min(1, abs(simd_dot(old[i].orientation.vector, current[i].orientation.vector)))) * CombatGeometry.bladeLength
         }
-        guard max(travel[0], travel[1]) / Float(dt) >= 1.4 else { return nil }
+        let speeds = (0..<2).map { i in
+            sampleIntervals[i] > 0 && sampleIntervals[i] <= 0.15 ? travel[i] / Float(sampleIntervals[i]) : 0
+        }
+        guard max(speeds[0], speeds[1]) >= 1.4 else { return nil }
         let steps = max(1, min(128, Int(ceil((travel[0] + travel[1]) / 0.035))))
         for step in 0...steps {
             let f = Float(step) / Float(steps)
