@@ -13,11 +13,12 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIdentifier</key><string>com.aircade.motionlab</string>
 <key>CFBundleName</key><string>Aircade</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.0</string>
-<key>CFBundleVersion</key><string>3</string>
+<key>CFBundleShortVersionString</key><string>0.4.0</string>
+<key>CFBundleVersion</key><string>4</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 <key>NSHighResolutionCapable</key><true/>
-<key>NSCameraUsageDescription</key><string>Aircade tracks your controller hand locally to move the saber sideways and vertically. Camera frames are not saved or uploaded.</string>
+<key>NSCameraUsageDescription</key><string>Aircade scans badge QR codes for player sign-in and tracks your controller hand locally. Camera frames are not saved or uploaded.</string>
 <key>NSMotionUsageDescription</key><string>Aircade uses AirPods motion to control your saber and test handheld tracking. Motion logs stay on this Mac.</string>
 </dict></plist>
 PLIST

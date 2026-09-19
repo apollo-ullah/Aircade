@@ -3,6 +3,10 @@
 Native macOS arcade: **hold an AirPod, swing a saber, and survive a 60-second neon rush**. Includes the original slash/parry test lab and optional webcam hand position.
 SwiftUI + SceneKit + Core Motion. No third-party dependencies. macOS 14+, Xcode / Swift 5.9+.
 
+## Badge profiles and local MongoDB
+
+Run `./scripts/start-station.sh` in a separate Terminal, then launch the app. Use **Scan badge** before physical play to create or retrieve a profile. Results are stored in local MongoDB; opted-in players appear at http://127.0.0.1:8787. Demo/scripted results are excluded. See [BADGE-STATION.md](BADGE-STATION.md) for setup, privacy, offline retries, tests, and LAN sharing.
+
 ## Launch
 
 ```sh

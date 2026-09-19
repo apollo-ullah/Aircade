@@ -19,6 +19,8 @@ final class HandTracker: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     @Published var mirrored = true { didSet { previousPoint = nil; point = nil; onLost?() } }
     @Published var preview: NSImage?
     @Published var handSelection = 0 { didSet { previousPoint = nil; point = nil; onLost?() } }
+    var scanBadges = false
+    var onBadge: ((String, String?) -> Void)?
     let session = AVCaptureSession()
     var onPoint: ((CGPoint, Double) -> Void)?
     var onLost: (() -> Void)?
@@ -71,7 +73,7 @@ final class HandTracker: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         captureQueue.async { [weak self] in
             guard let self else { return }
             self.session.beginConfiguration()
-            self.session.sessionPreset = .vga640x480
+            self.session.sessionPreset = self.scanBadges ? .hd1280x720 : .vga640x480
             self.session.inputs.forEach { self.session.removeInput($0) }
             self.session.outputs.forEach { self.session.removeOutput($0) }
             do {
@@ -96,7 +98,7 @@ final class HandTracker: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
                 self.session.startRunning()
                 DispatchQueue.main.async {
                     guard self.generation == token else { return }
-                    self.running = true; self.status = "Show your controller hand to the camera"
+                    self.running = true; self.status = self.scanBadges ? "Point the camera at your badge QR code" : "Show your controller hand to the camera"
                 }
             } catch {
                 self.session.commitConfiguration()
@@ -110,7 +112,7 @@ final class HandTracker: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     func stop() {
         generation += 1
         running = false; frameRate = 0; preview = nil
-        loseHand("Camera off · AirPod rotation only")
+        loseHand(scanBadges ? "Camera off · ready to scan a badge" : "Camera off · AirPod rotation only")
         captureQueue.async { [weak self] in self?.session.stopRunning() }
     }
     private func loseHand(_ message: String) {
@@ -119,9 +121,28 @@ final class HandTracker: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     }
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let time = ProcessInfo.processInfo.systemUptime
-        guard time - lastInference >= 1.0 / 30,
+        guard time - lastInference >= (scanBadges ? 0.25 : 1.0 / 30),
               let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastInference = time
+        if scanBadges {
+            let barcode = VNDetectBarcodesRequest()
+            barcode.symbologies = [.qr]
+            let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up)
+            try? handler.perform([barcode])
+            // Ignore frames with multiple QR codes rather than pairing the wrong name.
+            let observation = barcode.results?.count == 1 ? barcode.results?.first : nil
+            let payload = observation?.payloadStringValue
+            let suggestedName = observation.flatMap { BadgeNameReader.read(using: handler, below: $0.boundingBox) }
+            let input = CIImage(cvPixelBuffer: buffer)
+            let image = imageContext.createCGImage(input, from: input.extent).map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.running, ProcessInfo.processInfo.systemUptime - time < 3 else { return }
+                self.preview = image
+                self.status = "Point the camera at your badge QR code"
+                if let payload { self.onBadge?(payload, suggestedName) }
+            }
+            return
+        }
         do {
             try VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up).perform([request])
             var candidates: [(CGPoint, Float)] = []
@@ -190,7 +211,7 @@ struct HandPreview: View {
                                       y: (geometry.size.height - h) / 2 + (1 - p.y) * h)
                     }
                 } else {
-                    Image(systemName: "hand.raised").font(.largeTitle).foregroundStyle(.secondary)
+                    Image(systemName: tracker.scanBadges ? "qrcode.viewfinder" : "hand.raised").font(.largeTitle).foregroundStyle(.secondary)
                 }
             }
         }.frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 10))
