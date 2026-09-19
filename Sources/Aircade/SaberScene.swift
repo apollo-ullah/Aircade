@@ -524,7 +524,7 @@ final class SaberScene {
             pivot.simdPosition = basePivotPosition + SIMD3<Float>(x, 0, 0)
         }
     }
-    func syncTennis(ball: TennisBallFlight?, elapsed: Double) {
+    func syncTennis(ball: TennisBallFlight?, elapsed: Double, manualOpponent: Bool = false) {
         guard let ball else { tennisBall.isHidden = true; return }
         tennisBall.isHidden = false
         tennisBall.simdPosition = ball.position(at: elapsed)
@@ -533,7 +533,7 @@ final class SaberScene {
             trackedBounceFlight = ball.born
             showTennisBounce(at: bounce)
         }
-        if ball.direction == .towardOpponent, trackedOpponentFlight != ball.born {
+        if !manualOpponent, ball.direction == .towardOpponent, trackedOpponentFlight != ball.born {
             trackedOpponentFlight = ball.born
             let movementTime = max(0.12, ball.duration * 0.72)
             let contactX = ball.defenderContactX ?? ball.to.x
@@ -567,6 +567,20 @@ final class SaberScene {
             .rotateTo(x: 0.18, y: 0, z: -2.0, duration: 0.24)
         ]), forKey: "swing")
         tennisImpact(at: SIMD3<Float>(contactX, 0.05, Self.tennisOpponentZ), velocity: .zero)
+    }
+    func setTennisOpponentManual(positionX: Float, targetX: Float?, swing: Bool, enabled: Bool) {
+        guard enabled else { return }
+        tennisOpponent.removeAction(forKey: "track-ball")
+        tennisOpponent.removeAction(forKey: "prepare")
+        tennisOpponent.runAction(.move(to: SCNVector3(positionX, -1.64, Self.tennisOpponentZ), duration: 0.075), forKey: "manual-move")
+        guard swing else { return }
+        let stroke: TennisStroke = (targetX ?? positionX) >= positionX ? .forehand : .backhand
+        opponentSwingArm.removeAllActions()
+        let direction: CGFloat = stroke == .forehand ? -1 : 1
+        opponentSwingArm.runAction(.sequence([
+            .rotateTo(x: -0.08, y: direction * 0.5, z: direction * 1.7, duration: 0.10),
+            .rotateTo(x: 0.18, y: 0, z: -2.0, duration: 0.22)
+        ]), forKey: "manual-swing")
     }
     func tennisOpponentMiss(ballX: Float, attemptedX: Float) {
         let stroke: TennisStroke = ballX >= attemptedX ? .forehand : .backhand

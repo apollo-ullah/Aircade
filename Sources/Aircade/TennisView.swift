@@ -13,6 +13,9 @@ struct TennisView: View {
     var body: some View {
         ZStack {
             SaberView(controller: motion.scene).ignoresSafeArea()
+            if game.state.phase == .playing || game.state.phase == .countdown {
+                directOpponentSurface
+            }
             if game.state.phase == .menu { menu }
             else {
                 VStack(spacing: 0) {
@@ -55,6 +58,7 @@ struct TennisView: View {
                 Text("aircade").foregroundStyle(courtBlue).font(.system(size: 34, weight: .medium)).tracking(-1)
                 Rectangle().fill(courtBlue.opacity(0.25)).frame(width: 1, height: 30)
                 MotionButton("Neon Rush") { motion.selectSport(.neonRush) }.buttonStyle(.plain).foregroundStyle(.secondary)
+                Toggle("Codex practice", isOn: $game.codexPractice).toggleStyle(.switch)
                 Text("Tennis").fontWeight(.bold).foregroundStyle(courtBlue)
                 Spacer()
                 if let player = players.player {
@@ -144,7 +148,17 @@ struct TennisView: View {
             }.wiiReadout()
             Spacer()
             VStack(alignment: .trailing, spacing: 9) {
-                HStack { Text("BALLS").font(.system(size: 12, weight: .semibold)).tracking(1); MotionButton { game.pause() } label: { Image(systemName: "pause.fill") }.buttonStyle(.plain) }
+                HStack {
+                    if game.manualOpponentEnabled {
+                        MotionButton("RIVAL SWING") { game.swingOpponent() }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.yellow)
+                            .foregroundStyle(.black)
+                            .accessibilityLabel("Swing opponent racket")
+                    }
+                    Text("BALLS").font(.system(size: 12, weight: .semibold)).tracking(1)
+                    MotionButton { game.pause() } label: { Image(systemName: "pause.fill") }.buttonStyle(.plain)
+                }
                 HStack(spacing: 7) {
                     ForEach(0..<TennisMatch.startingBalls, id: \.self) { index in
                         Circle().fill(index < game.state.ballsLeft ? Color.yellow : .black.opacity(0.45)).frame(width: 18, height: 18)
@@ -154,10 +168,27 @@ struct TennisView: View {
         }.foregroundStyle(.white).padding(24)
     }
 
+    private var directOpponentSurface: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            let normalized = max(0, min(1, value.location.x / max(1, proxy.size.width)))
+                            game.moveOpponent(to: Float((normalized - 0.5) * 9.2))
+                        }
+                )
+                .accessibilityLabel("Opponent court control")
+                .accessibilityHint("Drag horizontally to move the opponent. Use Swing opponent racket to hit.")
+        }
+        .ignoresSafeArea()
+    }
+
     private var footer: some View {
         HStack {
             Text("Tennis").font(.system(size: 17, weight: .semibold)).italic()
-            Text(game.opponentStatus.label).font(.system(size: 10, weight: .bold))
+            Text(game.state.assistedOpponent ? "CODEX PRACTICE · Drag rival, then swing · Unranked" : game.opponentStatus.label).font(.system(size: 10, weight: .bold))
                 .foregroundStyle(game.opponentStatus.fallbackUsed ? .yellow : .green)
             Spacer(); ActiveControllerBadge(motion: motion, controllers: motion.controllers)
             Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
@@ -203,7 +234,7 @@ struct TennisView: View {
                 stat("\(game.state.accuracy)%", "ACCURACY")
             }
             RankProgressCard(players: players, runID: game.runID)
-            Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
+            Text(game.state.assistedOpponent ? "Practice run — score not saved." : players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
                 MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }

@@ -42,7 +42,6 @@ const auth = (req, res, next) => {
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return res.status(401).json({ error: 'Station authorization required' });
   next();
 };
-
 const finite = value => typeof value === 'number' && Number.isFinite(value);
 const validOpponentCandidate = value => value && typeof value.id === 'string' && /^[a-z0-9-]{1,32}$/.test(value.id)
   && finite(value.targetX) && Math.abs(value.targetX) <= 3.5

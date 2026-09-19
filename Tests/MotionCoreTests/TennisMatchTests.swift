@@ -82,6 +82,25 @@ final class TennisMatchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(match.score, 400)
     }
 
+    func testManualOpponentMustMoveAndSwingNearArrival() {
+        var match = started()
+        match.updateOpponentControl(positionX: 0, didSwing: false)
+        match.advance(match.ball!.duration, opponent: opponent)
+        XCTAssertNotNil(match.playerHit(speed: 2, horizontalDirection: 0))
+        let outgoing = match.ball!
+        match.advance(outgoing.duration - 0.2, opponent: opponent)
+        match.updateOpponentControl(positionX: 0, didSwing: true)
+        let returnEvents = match.advance(0.21, opponent: opponent)
+        XCTAssertTrue(returnEvents.contains { if case .opponentPreparing = $0 { return true }; return false })
+
+        var noSwing = started()
+        noSwing.updateOpponentControl(positionX: 0, didSwing: false)
+        noSwing.advance(noSwing.ball!.duration, opponent: opponent)
+        XCTAssertNotNil(noSwing.playerHit(speed: 2, horizontalDirection: 0))
+        let missed = noSwing.advance(noSwing.ball!.duration + 0.01, opponent: opponent)
+        XCTAssertTrue(missed.contains { if case .opponentMiss = $0 { return true }; return false })
+    }
+
     func testEarlyOrSlowSwingDoesNotReturnBallAndMissCostsABall() {
         var match = started()
         XCTAssertNil(match.playerHit(speed: 3, horizontalDirection: 0))

@@ -25,9 +25,9 @@ enum MenuSmoke {
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { timer in
             let now = ProcessInfo.processInfo.systemUptime
             maximumProgress = max(maximumProgress, motion.menu.progress)
-            let state = "\(step):\(motion.menu.active):\(motion.menu.diagnostics["armed"] ?? false):\(motion.menu.diagnostics["context"] ?? ""):\(motion.menu.hovered?.uuidString ?? "none")"
+            let state = describeState(motion, step: step)
             if state != previousState {
-                transitions.append(["state": state, "elapsed": now - began, "cursor": [motion.menu.pointer.unitPoint.x, motion.menu.pointer.unitPoint.y], "target": motion.menu.targets.first(where: { $0.id == motion.menu.hovered })?.name ?? "none", "progress": motion.menu.progress])
+                transitions.append(transition(motion, state: state, elapsed: now - began))
                 previousState = state
             }
             motion.receive(q: q, euler: .zero, rate: .zero, accel: .zero, sensorTime: now, location: "Simulated")
@@ -43,15 +43,21 @@ enum MenuSmoke {
             }
             if step >= steps.count || now - began > 7 {
                 timer.invalidate()
-                let report: [String: Any] = ["passed": step == steps.count && gameplayGated,
-                    "selectedButtons": checks, "gameplaySelectionDisabled": gameplayGated,
-                    "phase": String(describing: motion.shellRoute), "cursorActive": motion.menu.active,
-                    "targets": motion.menu.targets.map(\.name), "queuedScores": motion.players.pendingRuns.count, "samples": motion.samples,
-                    "viewport": [motion.menu.size.width, motion.menu.size.height],
-                    "cursor": [motion.menu.pointer.unitPoint.x, motion.menu.pointer.unitPoint.y],
-                    "maximumProgress": maximumProgress, "menu": motion.menu.diagnostics,
-                    "transitions": transitions,
-                    "hardwareVerified": false]
+                var report: [String: Any] = [:]
+                report["passed"] = step == steps.count && gameplayGated
+                report["selectedButtons"] = checks
+                report["gameplaySelectionDisabled"] = gameplayGated
+                report["phase"] = String(describing: motion.shellRoute)
+                report["cursorActive"] = motion.menu.active
+                report["targets"] = motion.menu.targets.map(\.name)
+                report["queuedScores"] = motion.players.pendingRuns.count
+                report["samples"] = motion.samples
+                report["viewport"] = [motion.menu.size.width, motion.menu.size.height]
+                report["cursor"] = [motion.menu.pointer.unitPoint.x, motion.menu.pointer.unitPoint.y]
+                report["maximumProgress"] = maximumProgress
+                report["menu"] = motion.menu.diagnostics
+                report["transitions"] = transitions
+                report["hardwareVerified"] = false
                 if let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]) {
                     try? data.write(to: motion.logDirectory.appendingPathComponent("menu-smoke-result.json"))
                 }
@@ -60,13 +66,31 @@ enum MenuSmoke {
             }
             // Let the new menu finish appearing before deliberately aiming at its button.
             if now - began < 0.8 { q = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0)); return }
-            if let target = motion.menu.targets.first(where: { $0.name == steps[step].0 && $0.enabled }), motion.menu.size.width > 0 {
-                let x = Float((target.frame.midX / motion.menu.size.width * 2 - 1) * 22.5 * .pi / 180)
-                let y = Float((1 - target.frame.midY / motion.menu.size.height * 2) * 13 * .pi / 180)
-                q = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: simd_normalize(SIMD3<Float>(tan(x), 1, tan(y))))
+            let stepName = steps[step].0
+            if let target = motion.menu.targets.first(where: { $0.name == stepName && $0.enabled }), motion.menu.size.width > 0 {
+                q = aim(at: target.frame, in: motion.menu.size)
             }
         }
         RunLoop.main.add(timer, forMode: .common)
+    }
+    private static func aim(at frame: CGRect, in size: CGSize) -> simd_quatf {
+        let unitX = Double(frame.midX / size.width) * 2 - 1
+        let unitY = 1 - Double(frame.midY / size.height) * 2
+        let x = Float(unitX * 22.5 * Double.pi / 180)
+        let y = Float(unitY * 13 * Double.pi / 180)
+        return simd_quatf(from: SIMD3<Float>(0, 1, 0), to: simd_normalize(SIMD3<Float>(tan(x), 1, tan(y))))
+    }
+    private static func describeState(_ motion: MotionModel, step: Int) -> String {
+        let armed = motion.menu.diagnostics["armed"] ?? false
+        let context = motion.menu.diagnostics["context"] ?? ""
+        let hovered = motion.menu.hovered?.uuidString ?? "none"
+        return "\(step):\(motion.menu.active):\(armed):\(context):\(hovered)"
+    }
+    private static func transition(_ motion: MotionModel, state: String, elapsed: Double) -> [String: Any] {
+        let target = motion.menu.targets.first(where: { $0.id == motion.menu.hovered })?.name ?? "none"
+        return ["state": state, "elapsed": elapsed,
+                "cursor": [motion.menu.pointer.unitPoint.x, motion.menu.pointer.unitPoint.y],
+                "target": target, "progress": motion.menu.progress]
     }
     private static func capture(_ motion: MotionModel, name: String) {
         if let view = NSApp.windows.first?.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {

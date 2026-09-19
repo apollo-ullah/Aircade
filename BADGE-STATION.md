@@ -20,6 +20,8 @@ cd /Users/adyan/Documents/GitHub/Aircade-integration
 
 Open http://127.0.0.1:8787 for the leaderboard. The app's trophy button opens it too.
 
+For Codex-controlled tennis, use computer control on the live Aircade window. Drag horizontally across the open court to move the far character and press **Rival Swing** in the HUD near contact. This keeps the player, AirPod input, opponent animation, and Codex interaction in one shared view.
+
 ## Player flow
 
 1. Open **Leaderboard → Scan hacker badge**, select a camera, and press **Start camera**. Show the badge QR. Manual/pasted code entry is available for testing or an external USB scanner.

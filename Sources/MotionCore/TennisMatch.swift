@@ -116,6 +116,9 @@ public struct TennisMatch {
     private var nextOpponentReturn: Double?
     private var pendingPlan: TennisOpponentReturn?
     private var opponentContactX: Float = 0
+    public var assistedOpponent = false
+    private var manualOpponentX: Float?
+    private var manualOpponentSwingAt: Double?
     private var sequence = 0
 
     public var remaining: Double { max(0, Self.duration - elapsed) }
@@ -150,6 +153,12 @@ public struct TennisMatch {
 
     public mutating func quit() { self = TennisMatch() }
 
+    public mutating func updateOpponentControl(positionX: Float?, didSwing: Bool) {
+        manualOpponentX = positionX.map { max(-6, min(6, $0)) }
+        if positionX == nil { manualOpponentSwingAt = nil }
+        else if didSwing { manualOpponentSwingAt = elapsed }
+    }
+
     @discardableResult
     public mutating func advance(_ delta: Double, opponent: any TennisOpponentStrategy) -> [TennisEvent] {
         guard delta.isFinite, delta > 0 else { return [] }
@@ -176,8 +185,16 @@ public struct TennisMatch {
                 scheduleOpponentReturn(after: 0.9)
             } else {
                 ball = nil
-                let attemptedX = flight.defenderContactX ?? flight.to.x
-                if abs(attemptedX - flight.to.x) > 0.04 {
+                let manuallyControlled = manualOpponentX != nil
+                let attemptedX = manualOpponentX ?? flight.defenderContactX ?? flight.to.x
+                let manualSwingValid = !manuallyControlled || manualOpponentSwingAt.map {
+                    assistedOpponent ? $0 >= flight.born : ($0 >= flight.arrival - 0.72 && $0 <= flight.arrival + 0.08)
+                } == true
+                manualOpponentSwingAt = nil
+                let missed = manuallyControlled
+                    ? abs(attemptedX - flight.to.x) > 1.0 || !manualSwingValid
+                    : abs(attemptedX - flight.to.x) > 0.04
+                if missed {
                     opponentContactX = attemptedX
                     opponentMisses += 1
                     rally = 0
@@ -255,8 +272,14 @@ public struct TennisMatch {
         let duration = min(4, max(0.85, flightDuration + 1.5))
         let distance = abs(aim - opponentContactX)
         let movement = Float(duration) * 1.35
-        let attemptedX = distance <= movement + 1
-            ? aim : opponentContactX + (aim < opponentContactX ? -1 : 1) * movement
+        let attemptedX: Float
+        if let manualOpponentX {
+            attemptedX = manualOpponentX
+            manualOpponentSwingAt = nil
+        } else {
+            attemptedX = distance <= movement + 1
+                ? aim : opponentContactX + (aim < opponentContactX ? -1 : 1) * movement
+        }
         ball = TennisBallFlight(id: incoming.id, born: elapsed, duration: duration,
                                 from: contact, to: SIMD3<Float>(aim, 0.05, -18),
                                 arcHeight: 2.05, direction: .towardOpponent,

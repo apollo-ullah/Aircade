@@ -51,6 +51,30 @@ import MotionCore
             return false
         }
         try require(opponentMissed && winner.opponentMisses == 1, "Out-of-reach shot did not beat the opponent")
-        print("PASS: tennis serve, bounce, valid swing, scoring, reachable rebound, wide-shot miss, and pause invariants")
+
+        var manual = TennisMatch()
+        manual.start()
+        manual.advance(3, opponent: opponent)
+        manual.advance(0.25, opponent: opponent)
+        manual.updateOpponentControl(positionX: 0, didSwing: false)
+        manual.advance(manual.ball!.duration, opponent: opponent)
+        try require(manual.playerHit(speed: 2, horizontalDirection: 0) != nil, "Manual-control setup swing was rejected")
+        let manualShot = manual.ball!
+        manual.advance(manualShot.duration - 0.2, opponent: opponent)
+        manual.updateOpponentControl(positionX: 0, didSwing: true)
+        let manualEvents = manual.advance(0.21, opponent: opponent)
+        try require(manualEvents.contains { if case .opponentPreparing = $0 { return true }; return false }, "Aligned manual opponent swing did not return the ball")
+        var practice = TennisMatch()
+        practice.start()
+        practice.assistedOpponent = true
+        practice.updateOpponentControl(positionX: 0, didSwing: false)
+        practice.advance(3, opponent: opponent)
+        practice.advance(0.25, opponent: opponent)
+        practice.advance(practice.ball!.duration, opponent: opponent)
+        try require(practice.playerHit(speed: 2, horizontalDirection: 0) != nil, "Practice setup failed")
+        practice.updateOpponentControl(positionX: 0, didSwing: true)
+        let practiceEvents = practice.advance(practice.ball!.duration + 0.01, opponent: opponent)
+        try require(practiceEvents.contains { if case .opponentPreparing = $0 { return true }; return false }, "Buffered practice swing did not return the moving ball")
+        print("PASS: tennis serve, bounce, valid swing, scoring, reachable rebound, wide-shot miss, manual opponent, and pause invariants")
     }
 }

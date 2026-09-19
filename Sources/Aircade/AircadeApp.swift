@@ -112,7 +112,8 @@ struct AircadeApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
                     if !CommandLine.arguments.contains("--game-smoke-test") && !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") && !CommandLine.arguments.contains("--tennis-smoke") && !CommandLine.arguments.contains("--shell-smoke") {
                         motion.game.pause("Paused while Aircade was in the background.")
-                        motion.tennis.pause("Paused while Aircade was in the background.")
+                        // Tennis may be controlled through the live game window by
+                        // Codex computer use, so a focus handoff must not pause it.
                         if motion.showingMultiplayer { motion.multiplayer.pause("Paused while Aircade was in the background.") }
                     }
                 }

@@ -10,6 +10,7 @@ enum AircadeSport: String, CaseIterable {
 
 final class TennisGame: ObservableObject {
     @Published private(set) var state = TennisMatch()
+    @Published var codexPractice = true
     @Published var enabled = false
     @Published var inputReady = false
     @Published var feedback = ""
@@ -47,6 +48,8 @@ final class TennisGame: ObservableObject {
     private var feedbackUntil = 0.0
     private var resultSaved = false
     private var recoveryStartedAt = 0.0
+    @Published private(set) var manualOpponentEnabled = false
+    @Published private(set) var manualOpponentX: Float = 0
 
     init(scene: SaberScene, opponent: any TennisOpponentStrategy = BasetenTennisOpponent(), automaticTimer: Bool = true,
          clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }, scoreDefaults: UserDefaults = .standard) {
@@ -73,9 +76,10 @@ final class TennisGame: ObservableObject {
         if let authorizeRun, !authorizeRun() { return }
         guard liveReady else { return }
         if !resultSaved { onRunAbandoned?(runID) }
-        runID = onRunStarted?(demo)
-        isDemo = demo
+        runID = onRunStarted?(demo || codexPractice)
+        isDemo = demo || codexPractice
         state.start()
+        state.assistedOpponent = codexPractice
         resultSaved = false
         newRecord = false
         feedback = ""
@@ -83,6 +87,9 @@ final class TennisGame: ObservableObject {
         previousBall = nil
         previousTime = nil
         recoveringInput = false
+        manualOpponentEnabled = codexPractice
+        manualOpponentX = 0
+        state.updateOpponentControl(positionX: codexPractice ? 0 : nil, didSwing: false)
         lastTick = now
         scene.clearTennis()
         modelOpponent?.refresh(playerID: activePlayerID?(), match: state)
@@ -172,7 +179,7 @@ final class TennisGame: ObservableObject {
               let event = state.playerHit(speed: shot.swingSpeed, targetX: shot.targetX,
                                          flightDuration: shot.flightDuration, contactPoint: contact.point) else { return }
         handle(event, point: contact.point, velocity: contact.velocity)
-        scene.syncTennis(ball: state.ball, elapsed: state.elapsed)
+        scene.syncTennis(ball: state.ball, elapsed: state.elapsed, manualOpponent: manualOpponentEnabled)
     }
 
     func tick() {
@@ -191,11 +198,43 @@ final class TennisGame: ObservableObject {
         }
         guard delta.isFinite, delta > 0 else { return }
         if delta > 0.1 { previousPose = nil; previousTime = nil; previousBall = nil }
-        for event in state.advance(min(delta, 0.1), opponent: opponent) {
+        // Codex gets a continuous, readable six-ish second flight. Its swing is
+        // buffered by TennisMatch, so computer-control latency does not require
+        // stopping the ball at the far baseline.
+        let pace = state.assistedOpponent && state.ball?.direction == .towardOpponent ? 0.45 : 1.0
+        for event in state.advance(min(delta, 0.1) * pace, opponent: opponent) {
             handle(event, point: state.ball?.position(at: state.elapsed) ?? SIMD3<Float>(0, 0, 0), velocity: .zero)
         }
-        scene.syncTennis(ball: state.ball, elapsed: state.elapsed)
+        scene.syncTennis(ball: state.ball, elapsed: state.elapsed, manualOpponent: manualOpponentEnabled)
         if state.phase == .results { finish() }
+    }
+
+    /// Direct mouse control from the live court. The AirPod continues to drive
+    /// the near player's racket while the pointer drives the far opponent.
+    func moveOpponent(to positionX: Float) {
+        guard state.phase == .playing || state.phase == .countdown else { return }
+        manualOpponentEnabled = true
+        manualOpponentX = max(-4.6, min(4.6, positionX))
+        state.updateOpponentControl(positionX: manualOpponentX, didSwing: false)
+        scene.setTennisOpponentManual(positionX: manualOpponentX,
+                                      targetX: state.ball?.direction == .towardOpponent ? state.ball?.to.x : nil,
+                                      swing: false,
+                                      enabled: true)
+    }
+
+    func swingOpponent() {
+        guard state.phase == .playing else { return }
+        if !manualOpponentEnabled { moveOpponent(to: 0) }
+        state.updateOpponentControl(positionX: manualOpponentX, didSwing: true)
+        scene.setTennisOpponentManual(positionX: manualOpponentX,
+                                      targetX: state.ball?.direction == .towardOpponent ? state.ball?.to.x : nil,
+                                      swing: true,
+                                      enabled: true)
+    }
+
+    func restoreAutomaticOpponent() {
+        manualOpponentEnabled = false
+        state.updateOpponentControl(positionX: nil, didSwing: false)
     }
 
     private func handle(_ event: TennisEvent, point: SIMD3<Float>, velocity: SIMD3<Float>) {
@@ -203,12 +242,13 @@ final class TennisGame: ObservableObject {
         feedbackUntil = now + 0.9
         switch event {
         case .opponentPreparing(let contactX, let stroke, let delay):
-            scene.prepareTennisOpponent(contactX: contactX, stroke: stroke, delay: delay)
+            if !manualOpponentEnabled { scene.prepareTennisOpponent(contactX: contactX, stroke: stroke, delay: delay) }
         case .opponentReturn(let contactX, let stroke):
             feedbackGood = true
             feedbackPoints = 0
             feedback = state.rally == 0 ? "SERVE" : "RETURNING"
-            scene.tennisOpponentHit(contactX: contactX, stroke: stroke)
+            if manualOpponentEnabled { scene.tennisImpact(at: SIMD3<Float>(contactX, 0.05, -18), velocity: .zero) }
+            else { scene.tennisOpponentHit(contactX: contactX, stroke: stroke) }
         case .playerReturn(let points):
             feedbackGood = true
             feedbackPoints = points

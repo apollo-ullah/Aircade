@@ -29,6 +29,10 @@ This setting only changes Aircade playback, not system-wide audio. Device change
 
 Run `./scripts/start-station.sh` in a separate Terminal, then launch the app. **Guest play works immediately without the server.** Optionally open **Leaderboard → Scan hacker badge** to create or retrieve a profile. Results are stored in local MongoDB; opted-in players appear at http://127.0.0.1:8787. Each game has its own board, personal bests, next-rival score targets, and post-round rank-climb feedback. Demo/scripted results are excluded. The station supports a local MongoDB installation or Docker Desktop. See [BADGE-STATION.md](BADGE-STATION.md) for setup, privacy, offline retries, tests, and LAN sharing.
 
+### Direct Codex opponent control
+
+Codex computer use can operate the opponent in the same Aircade window as the player. During a rally, dragging horizontally anywhere on the open court moves the far character. Once direct control is active, the **Rival Swing** button appears in the game HUD; press it near contact to return the ball. The opponent misses if it is farther than one court unit from the incoming ball or swings outside the contact window. The AirPod continues to control the near player's racket and Baseten continues to choose the opponent's outgoing return lane.
+
 ## Launch
 
 ```sh
@@ -186,3 +190,5 @@ The current public Core Motion API exposes one AirPods motion stream at a time, 
 - [Nintendo on the sensor bar](https://en-americas-support.nintendo.com/app/answers/detail/a_id/2954/p/604/c/947): it contains infrared light sources. Aircade's ordinary webcam is a different optical reference, not a Wii IR implementation.
 - [Apple hand-pose detection](https://developer.apple.com/videos/play/wwdc2020/10653/): Vision exposes wrist and finger landmarks.
 - [Apple headphone motion](https://developer.apple.com/documentation/coremotion/cmheadphonemotionmanager): processed orientation, angular velocity, and acceleration.
+
+Codex practice is enabled by default for direct computer play. Returns toward the opponent travel at roughly half speed, and a rival swing made at any point during that flight is buffered until contact. The ball keeps moving continuously and position still matters. Practice scores are not saved; disable Codex practice on the Tennis menu for normal ranked timing.
