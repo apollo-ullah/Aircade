@@ -3,13 +3,13 @@ import CryptoKit
 import SwiftUI
 import MotionCore
 
-struct BadgePlayer: Codable {
+struct BadgePlayer: Codable, Equatable {
     var id: String
     var nickname: String
     var isPublic: Bool
     var needsName: Bool? = nil
 }
-struct BadgeRun: Codable {
+struct BadgeRun: Codable, Equatable {
     var id: String
     var playerID: String
     var game: String? = nil
@@ -27,25 +27,38 @@ struct StationConfiguration: Codable {
     let token: String
 }
 final class PlayerSession: ObservableObject {
+    typealias Transport = (URLRequest) async throws -> (Data, URLResponse)
     @Published var player: BadgePlayer?
     @Published var showingSignIn = false
     @Published var suggestedName: String?
     @Published var busy = false
     @Published var bests: [String: Int] = [:]
-    @Published var message = "Scan your badge before playing a ranked round."
+    @Published var message = "Ready to play as a guest. Sign in to save scores to your profile."
     @Published var saveStatus = ""
-    private var runIdentity: (id: String, playerID: String)?
+    @Published private(set) var activeRun: RunContext?
     private var pending: [BadgeRun] = []
     private var uploading = false
     private var retryTimer: Timer?
     private let queueURL: URL
-    private var configuration: StationConfiguration? {
+    private let configurationProvider: () -> StationConfiguration?
+    private let transport: Transport
+    private let uploadOnFinish: Bool
+    private var profileRevision = 0
+    private var configuration: StationConfiguration? { configurationProvider() }
+    static func loadConfiguration() -> StationConfiguration? {
         let path = ProcessInfo.processInfo.environment["AIRCADE_STATION_CONFIG"]
         let url = path.map { URL(fileURLWithPath: $0) } ?? Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(".local/station.json")
         return (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode(StationConfiguration.self, from: $0) }
     }
     var leaderboardURL: URL { URL(string: configuration?.url ?? "") ?? URL(string: "http://127.0.0.1:8787")! }
-    init(queueDirectory: URL? = nil, automaticRetry: Bool = true) {
+    var pendingRuns: [BadgeRun] { pending }
+
+    init(queueDirectory: URL? = nil, automaticRetry: Bool = true, uploadOnFinish: Bool = true,
+         configurationProvider: @escaping () -> StationConfiguration? = PlayerSession.loadConfiguration,
+         transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
+        self.configurationProvider = configurationProvider
+        self.transport = transport
+        self.uploadOnFinish = uploadOnFinish
         let directory = queueDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Aircade", isDirectory: true)
         queueURL = directory.appendingPathComponent("pending-runs.json")
         do {
@@ -57,42 +70,98 @@ final class PlayerSession: ObservableObject {
             flush()
         }
     }
+    deinit { retryTimer?.invalidate() }
+
     func authorize() -> Bool {
-        guard player != nil else { showingSignIn = true; return false }
+        // Profile/network availability never gates the start of a game.
         return true
     }
+
+    @discardableResult
+    func beginRun(game: ArcadeRunGame, mode: String, simulated: Bool = false, avatarID: String? = nil) -> RunContext {
+        let context = RunContext(game: game, mode: mode, player: player, simulated: simulated, avatarID: avatarID)
+        activeRun = context
+        saveStatus = simulated ? "Demo and scripted scores are not saved." : context.isGuest ? "Guest score stays on this Mac." : ""
+        return context
+    }
+
+    // Compatibility for the original Neon Rush callback. New adapters supply game and mode explicitly.
     func beginRun(demo: Bool) {
-        runIdentity = demo ? nil : player.map { (UUID().uuidString, $0.id) }
-        saveStatus = demo ? "Demo and scripted scores are not saved." : ""
+        beginRun(game: .neonRush, mode: "Arcade", simulated: demo)
     }
-    func finishRun(_ state: NeonRush, demo: Bool) {
-        guard !demo, let identity = runIdentity else { return }
-        runIdentity = nil
-        pending.append(BadgeRun(id: identity.id, playerID: identity.playerID, game: "Neon Rush", difficulty: state.difficulty.rawValue,
-                               score: state.score, cuts: state.cuts, bestCombo: state.bestCombo, accuracy: state.accuracy,
-                               completed: state.completed, isDemo: false, gameVersion: "0.5.0"))
-        persistQueue(); flush()
+
+    func observeInput(simulated: Bool, runID: String? = nil) {
+        guard runID == nil || activeRun?.id == runID else { return }
+        activeRun?.observeInput(simulated: simulated)
+        if activeRun?.isSimulated == true { saveStatus = "Demo and scripted scores are not saved." }
     }
-    func finishTennis(_ state: TennisMatch, demo: Bool) {
-        guard !demo, let identity = runIdentity else { return }
-        runIdentity = nil
-        pending.append(BadgeRun(id: identity.id, playerID: identity.playerID, game: "Tennis", difficulty: "Tennis",
-                               score: state.score, cuts: state.returns, bestCombo: state.longestRally, accuracy: state.accuracy,
-                               completed: state.completed, isDemo: false, gameVersion: "0.5.0"))
-        persistQueue(); flush()
+
+    func canRecordLocalBest(for runID: String) -> Bool {
+        activeRun?.id == runID && activeRun?.eligibleForLocalBest == true
+    }
+
+    func abandonRun(runID: String? = nil) {
+        guard runID == nil || activeRun?.id == runID else { return }
+        activeRun = nil
+    }
+
+    @discardableResult
+    func finishRun(_ state: NeonRush, demo: Bool, runID: String? = nil) -> RunCompletion? {
+        guard state.phase == .results else { return nil }
+        return finish(game: .neonRush, runID: runID, simulated: demo, difficulty: state.difficulty.rawValue,
+                      score: state.score, cuts: state.cuts, bestCombo: state.bestCombo, accuracy: state.accuracy,
+                      completed: state.completed)
+    }
+
+    @discardableResult
+    func finishTennis(_ state: TennisMatch, demo: Bool, runID: String? = nil) -> RunCompletion? {
+        guard state.phase == .results else { return nil }
+        return finish(game: .tennis, runID: runID, simulated: demo, difficulty: "Tennis",
+                      score: state.score, cuts: state.returns, bestCombo: state.longestRally, accuracy: state.accuracy,
+                      completed: state.completed)
+    }
+
+    /// Duel currently has local results only; its scoring is not part of the station API.
+    @discardableResult
+    func finishLocalRun(runID: String, simulated: Bool = false) -> RunCompletion? {
+        guard var context = activeRun, context.id == runID, context.game == .saberDuel else { return nil }
+        context.observeInput(simulated: simulated)
+        activeRun = nil
+        return RunCompletion(context: context, queuedForProfile: false)
+    }
+
+    private func finish(game: ArcadeRunGame, runID: String?, simulated: Bool, difficulty: String,
+                        score: Int, cuts: Int, bestCombo: Int, accuracy: Int, completed: Bool) -> RunCompletion? {
+        guard var context = activeRun, context.game == game, runID == nil || context.id == runID else { return nil }
+        context.observeInput(simulated: simulated)
+        // Consume before queueing. Repeated/late result callbacks cannot submit twice.
+        activeRun = nil
+        guard context.eligibleForProfileUpload, let profile = context.profile else {
+            saveStatus = context.isSimulated ? "Demo and scripted scores are not saved." : "Guest score stays on this Mac."
+            return RunCompletion(context: context, queuedForProfile: false)
+        }
+        pending.append(BadgeRun(id: context.id, playerID: profile.id, game: context.game.rawValue, difficulty: difficulty,
+                               score: score, cuts: cuts, bestCombo: bestCombo, accuracy: accuracy,
+                               completed: completed, isDemo: false, gameVersion: "0.5.0"))
+        saveStatus = "Score queued for your profile."
+        persistQueue()
+        if uploadOnFinish { flush() }
+        return RunCompletion(context: context, queuedForProfile: true)
     }
     private func persistQueue() {
         do { try JSONEncoder().encode(pending).write(to: queueURL, options: .atomic) }
         catch { saveStatus = "Score is in memory only; disk save failed: \(error.localizedDescription)" }
     }
     func logout() {
+        // Changing the selected profile affects future runs. A running round retains its owner.
+        profileRevision += 1
         player = nil
         suggestedName = nil
         bests = [:]
-        runIdentity = nil
-        message = "Logged out. Scan your badge to load your profile and high scores."
+        message = "Ready to play as a guest. Sign in to save scores to your profile."
         showingSignIn = false
     }
+    func selectGuest() { logout() }
     func nextPlayer() {
         logout()
         message = "Scan the next player’s badge."
@@ -102,11 +171,13 @@ final class PlayerSession: ObservableObject {
         let payload = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !busy, !payload.isEmpty, payload.utf8.count <= 4096 else { message = "Enter a badge code (up to 4096 bytes)."; return }
         busy = true; message = "Finding your player profile…"
+        let revision = profileRevision
         let digest = SHA256.hash(data: Data(payload.utf8)).map { String(format: "%02x", $0) }.joined()
         Task { @MainActor in
             defer { busy = false }
             do {
                 let data = try await request("/api/sign-in", method: "POST", body: ["badgeDigest": digest])
+                guard profileRevision == revision else { return }
                 let found = try JSONDecoder().decode(BadgePlayer.self, from: data)
                 let needsName = found.needsName ?? (found.nickname == "Player " + found.id.prefix(6))
                 suggestedName = needsName ? candidateName.flatMap(BadgeNameReader.clean) : nil
@@ -114,34 +185,40 @@ final class PlayerSession: ObservableObject {
                 player = found
                 refreshBests()
                 message = suggestedName == nil ? "Welcome! Choose your nickname and leaderboard visibility." : "Name read from your badge. Confirm or correct it before saving."
-            } catch { message = error.localizedDescription }
+            } catch { if profileRevision == revision { message = error.localizedDescription } }
         }
     }
     func saveProfile(nickname: String, isPublic: Bool) {
         guard let player, !busy else { return }
         busy = true
+        let revision = profileRevision
         Task { @MainActor in
             defer { busy = false }
             do {
                 let data = try await request("/api/players/\(player.id)", method: "PATCH", body: ["nickname": nickname, "isPublic": isPublic])
+                guard profileRevision == revision, self.player?.id == player.id else { return }
                 self.player = try JSONDecoder().decode(BadgePlayer.self, from: data)
                 suggestedName = nil
                 message = "Ready to play"; showingSignIn = false
-            } catch { message = error.localizedDescription }
+            } catch { if profileRevision == revision { message = error.localizedDescription } }
         }
     }
     func flush() {
+        Task { @MainActor [weak self] in await self?.flushPending() }
+    }
+
+    /// Explicit async entry point also allows offline/retry verification without real timers or MongoDB.
+    @MainActor
+    func flushPending() async {
         guard !uploading, !pending.isEmpty else { return }
         uploading = true
-        Task { @MainActor in
-            defer { uploading = false }
-            while let run = pending.first {
-                do {
-                    let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(run)) as! [String: Any]
-                    _ = try await request("/api/runs", method: "POST", body: body)
-                    pending.removeFirst(); persistQueue(); saveStatus = "Score saved to MongoDB."; refreshBests()
-                } catch { saveStatus = "Score queued — \(error.localizedDescription) Retrying automatically."; return }
-            }
+        defer { uploading = false }
+        while let run = pending.first {
+            do {
+                let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(run)) as! [String: Any]
+                _ = try await request("/api/runs", method: "POST", body: body)
+                pending.removeFirst(); persistQueue(); saveStatus = "Score saved to your profile."; refreshBests()
+            } catch { saveStatus = "Score queued — \(error.localizedDescription) Retrying automatically."; return }
         }
     }
     func refreshBests() {
@@ -161,7 +238,7 @@ final class PlayerSession: ObservableObject {
         request.setValue("Bearer \(config.token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if method != "GET" { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await transport(request)
         guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
             let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: String])?["error"] ?? "Server request failed."
             throw NSError(domain: "Aircade", code: 2, userInfo: [NSLocalizedDescriptionKey: detail])
