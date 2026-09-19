@@ -66,6 +66,7 @@ struct AircadeApp: App {
                     if CommandLine.arguments.contains("--duel-smoke") { DuelSmoke.run(motion) }
                     if CommandLine.arguments.contains("--tennis-smoke") { TennisSmoke.run(motion) }
                     if CommandLine.arguments.contains("--shell-smoke") { ShellSmoke.run(motion) }
+                    if CommandLine.arguments.contains("--leaderboard-preview") { LeaderboardPreview.run(motion) }
                     if CommandLine.arguments.contains("--scripted-repro") { ScriptedGameCheck.run(motion, reproduce: true) }
                     if CommandLine.arguments.contains("--scripted-game-test") { ScriptedGameCheck.run(motion) }
                     if CommandLine.arguments.contains("--scripted-demo") { motion.startScripted(.perfectRun) }

@@ -20,7 +20,7 @@ enum ChannelCatalog {
         Channel(route: .neonRush, title: "Neon Rush", symbol: "bolt.fill"),
         Channel(route: .duel, title: "Saber Duel", symbol: "person.2.fill"),
         Channel(route: .controller, title: "Controllers", symbol: "gamecontroller.fill"),
-        Channel(route: .profile, title: "Players & scores", symbol: "person.crop.circle"),
+        Channel(route: .profile, title: "Leaderboard", symbol: "person.crop.circle"),
         Channel(route: .lab, title: "Practice", symbol: "target")
     ]
 

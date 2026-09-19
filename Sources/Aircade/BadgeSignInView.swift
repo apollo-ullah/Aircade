@@ -9,7 +9,7 @@ struct BadgeSignInView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text(players.player == nil ? "Scan your badge" : "Your player profile").font(.title2.bold())
+                Text(players.player == nil ? "Scan your hacker badge" : "Your player profile").font(.title2.bold())
                 Spacer()
                 Button("Cancel") { players.showingSignIn = false }.disabled(players.busy)
             }
@@ -28,7 +28,7 @@ struct BadgeSignInView: View {
                 TextField("Name or nickname (2–24 characters)", text: $nickname).textFieldStyle(.roundedBorder)
                 Toggle("Show my nickname and scores on the public leaderboard", isOn: $isPublic)
                 Text("Your badge QR is never shown publicly. Anyone viewing the leaderboard can see opted-in nicknames and results.").font(.caption).foregroundStyle(.secondary)
-                Button("Save profile & return to game") { players.saveProfile(nickname: nickname, isPublic: isPublic) }
+                Button("Save profile") { players.saveProfile(nickname: nickname, isPublic: isPublic) }
                     .buttonStyle(WiiButtonStyle(primary: true)).disabled(players.busy || nickname.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || nickname.count > 24)
                 Button("Scan a different badge") { players.player = nil; players.suggestedName = nil; code = "" }
                 Text("Player ID: \(player.id.prefix(8))").font(.caption).foregroundStyle(.secondary)

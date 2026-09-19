@@ -35,6 +35,11 @@ final class PlayerSession: ObservableObject {
     @Published var bests: [String: Int] = [:]
     @Published var message = "Ready to play as a guest. Sign in to save scores to your profile."
     @Published var saveStatus = ""
+    @Published private(set) var leaderboards: [String: LeaderboardBoard] = [:]
+    @Published private(set) var standings: [String: LeaderboardStanding] = [:]
+    @Published private(set) var leaderboardStatus: [String: String] = [:]
+    @Published private(set) var lastRankProgress: RankProgress?
+    private var boardRequests: [String: UUID] = [:]
     @Published private(set) var activeRun: RunContext?
     private var pending: [BadgeRun] = []
     private var uploading = false
@@ -51,6 +56,11 @@ final class PlayerSession: ObservableObject {
         return (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode(StationConfiguration.self, from: $0) }
     }
     var leaderboardURL: URL { URL(string: configuration?.url ?? "") ?? URL(string: "http://127.0.0.1:8787")! }
+    func leaderboardURL(for mode: String) -> URL {
+        var components = URLComponents(url: leaderboardURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "mode", value: mode)]
+        return components.url!
+    }
     var pendingRuns: [BadgeRun] { pending }
     var profilesAvailable: Bool { configuration != nil }
 
@@ -82,6 +92,7 @@ final class PlayerSession: ObservableObject {
     func beginRun(game: ArcadeRunGame, mode: String, simulated: Bool = false, avatarID: String? = nil) -> RunContext {
         let context = RunContext(game: game, mode: mode, player: player, simulated: simulated, avatarID: avatarID)
         activeRun = context
+        lastRankProgress = nil
         saveStatus = simulated ? "Demo and scripted scores are not saved." : context.isGuest ? "Guest score stays on this Mac." : ""
         return context
     }
@@ -159,6 +170,7 @@ final class PlayerSession: ObservableObject {
         player = nil
         suggestedName = nil
         bests = [:]
+        standings = [:]; lastRankProgress = nil
         message = "Ready to play as a guest. Sign in to save scores to your profile."
         showingSignIn = false
     }
@@ -182,7 +194,7 @@ final class PlayerSession: ObservableObject {
                 let found = try JSONDecoder().decode(BadgePlayer.self, from: data)
                 let needsName = found.needsName ?? (found.nickname == "Player " + found.id.prefix(6))
                 suggestedName = needsName ? candidateName.flatMap(BadgeNameReader.clean) : nil
-                bests = [:]
+                bests = [:]; standings = [:]; lastRankProgress = nil
                 player = found
                 refreshBests()
                 message = suggestedName == nil ? "Welcome! Choose your nickname and leaderboard visibility." : "Name read from your badge. Confirm or correct it before saving."
@@ -200,6 +212,8 @@ final class PlayerSession: ObservableObject {
                 guard profileRevision == revision, self.player?.id == player.id else { return }
                 self.player = try JSONDecoder().decode(BadgePlayer.self, from: data)
                 suggestedName = nil
+                standings = [:]; lastRankProgress = nil
+                refreshBests()
                 message = "Ready to play"; showingSignIn = false
             } catch { if profileRevision == revision { message = error.localizedDescription } }
         }
@@ -217,24 +231,59 @@ final class PlayerSession: ObservableObject {
         while let run = pending.first {
             do {
                 let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(run)) as! [String: Any]
-                _ = try await request("/api/runs", method: "POST", body: body)
+                let data = try await request("/api/runs", method: "POST", body: body)
+                if let progress = try? JSONDecoder().decode(RunSaveResponse.self, from: data).progress,
+                   progress.runID == run.id, progress.playerID == run.playerID, player?.id == run.playerID {
+                    lastRankProgress = progress
+                    standings[run.difficulty] = progress.standing
+                }
                 pending.removeFirst(); persistQueue(); saveStatus = "Score saved to your profile."; refreshBests()
+                refreshLeaderboard(run.difficulty)
             } catch { saveStatus = "Score queued — \(error.localizedDescription) Retrying automatically."; return }
         }
     }
     func refreshBests() {
         guard let id = player?.id else { return }
+        for mode in ["Arcade", "Chill", "Tennis"] { refreshLeaderboard(mode) }
         Task { @MainActor in
             guard let data = try? await request("/api/players/\(id)/bests", method: "GET", body: [:]), player?.id == id else { return }
             bests = (try? JSONDecoder().decode([String: Int].self, from: data)) ?? [:]
         }
     }
-    private func request(_ path: String, method: String, body: [String: Any]) async throws -> Data {
+    func refreshLeaderboard(_ mode: String = "Arcade") {
+        guard ["Arcade", "Chill", "Tennis"].contains(mode) else { return }
+        guard profilesAvailable else { leaderboardStatus[mode] = "Badge station is offline. Guest play is available."; return }
+        let requestID = UUID(); boardRequests[mode] = requestID
+        let profileID = player?.id, revision = profileRevision
+        if leaderboards[mode] == nil { leaderboardStatus[mode] = "Loading leaderboard…" }
+        Task { @MainActor in
+            do {
+                let data = try await request("/api/leaderboard", method: "GET", body: [:], query: ["difficulty": mode])
+                let board = try JSONDecoder().decode(LeaderboardBoard.self, from: data)
+                guard boardRequests[mode] == requestID else { return }
+                leaderboards[mode] = board
+                leaderboardStatus[mode] = board.rows.isEmpty ? "Be the first to put a score on the board." : "Live board · best score per player"
+                if let profileID {
+                    let data = try await request("/api/players/\(profileID)/standing", method: "GET", body: [:], query: ["difficulty": mode])
+                    guard boardRequests[mode] == requestID, profileRevision == revision, player?.id == profileID else { return }
+                    standings[mode] = try JSONDecoder().decode(LeaderboardStanding.self, from: data)
+                }
+            } catch {
+                guard boardRequests[mode] == requestID else { return }
+                leaderboardStatus[mode] = leaderboards[mode] == nil ? "Leaderboard unavailable. Start the badge station, then refresh." : "Connection interrupted · showing last received scores"
+            }
+        }
+    }
+
+    private func request(_ path: String, method: String, body: [String: Any], query: [String: String] = [:]) async throws -> Data {
         guard let config = configuration, let base = URL(string: config.url), let scheme = base.scheme,
               scheme == "https" || (scheme == "http" && ["127.0.0.1", "localhost"].contains(base.host ?? "")) else {
             throw NSError(domain: "Aircade", code: 1, userInfo: [NSLocalizedDescriptionKey: "Start the local server first (scripts/start-station.sh)."])
         }
-        var request = URLRequest(url: base.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))))
+        let endpoint = base.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
+        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
+        components.queryItems = query.isEmpty ? nil : query.sorted(by: { $0.key < $1.key }).map { URLQueryItem(name: $0.key, value: $0.value) }
+        var request = URLRequest(url: components.url!)
         request.httpMethod = method; request.timeoutInterval = 8
         request.setValue("Bearer \(config.token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

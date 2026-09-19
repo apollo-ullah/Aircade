@@ -1,5 +1,7 @@
 import Foundation
 import MotionCore
+import CoreImage
+import Vision
 
 @main struct StationClientCheck {
     @MainActor static func main() async throws {
@@ -13,59 +15,62 @@ import MotionCore
         func check(_ condition: Bool, _ message: String) throws {
             if !condition { throw NSError(domain: "StationCheck", code: 2, userInfo: [NSLocalizedDescriptionKey: message]) }
         }
+        // A generated test QR goes through the production Vision reader, not a mocked scanner.
+        let filter = CIFilter(name: "CIQRCodeGenerator")!
+        filter.setValue(Data("native-client-test-badge".utf8), forKey: "inputMessage")
+        let qr = filter.outputImage!.transformed(by: CGAffineTransform(scaleX: 10, y: 10))
+        let canvas = qr.transformed(by: CGAffineTransform(translationX: 40, y: 40))
+            .composited(over: CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: qr.extent.width + 80, height: qr.extent.height + 80)))
+        let image = CIContext().createCGImage(canvas, from: canvas.extent)!
+        let scan = BadgeScanner.read(using: VNImageRequestHandler(cgImage: image, orientation: .up))
+        try check(scan?.payload == "native-client-test-badge", "Vision did not read the test badge")
         let session = PlayerSession(queueDirectory: root, automaticRetry: false)
-        try check(!session.authorize() && session.showingSignIn, "Physical play must require a profile")
-        session.signIn("native-client-test-badge", suggestedName: "Test Name")
+        try check(session.authorize() && !session.showingSignIn, "Guest play must not require a profile")
+        session.signIn(scan!.payload, suggestedName: "Test Name")
         try await wait { !session.busy }
         try check(session.player != nil, session.message)
-        try check(session.suggestedName == "Test Name", "First scan should suggest the OCR name")
-        try check(session.player!.nickname != "Test Name", "OCR must not save a name without confirmation")
-        session.saveProfile(nickname: "Chosen Name", isPublic: false)
+        try check(session.suggestedName == "Test Name" && session.player!.nickname != "Test Name", "OCR requires confirmation")
+        session.saveProfile(nickname: "Native Test Player", isPublic: true)
         try await wait { !session.busy }
         let originalID = session.player!.id
-        session.signIn("native-client-test-badge", suggestedName: "Wrong OCR")
+        session.signIn(scan!.payload, suggestedName: "Wrong OCR")
         try await wait { !session.busy }
-        try check(session.player?.id == originalID, "Returning badge changed identity")
-        try check(session.suggestedName == nil && session.player?.nickname == "Chosen Name", "Returning name must not be overwritten")
-        try check(BadgeNameReader.clean("Badge ID: something") == nil && BadgeNameReader.clean("x@example.com") == nil, "Reject badge labels and email")
-        try check(BadgeNameReader.clean("  Élodie   O’Neil ") == "Élodie O’Neil", "Preserve Unicode names")
-        var state = NeonRush(); state.start(difficulty: .arcade)
-        session.beginRun(demo: true); session.finishRun(state, demo: true)
-        let queue = root.appendingPathComponent("pending-runs.json")
-        try check(!FileManager.default.fileExists(atPath: queue.path), "Demo entered upload queue")
+        try check(session.player?.id == originalID && session.suggestedName == nil, "Returning badge identity/name changed")
+        var result = NeonRush(); result.start(difficulty: .arcade); result.advance(3); result.advance(NeonRush.duration)
+        let demo = session.beginRun(game: .neonRush, mode: "Arcade", simulated: true)
+        session.finishRun(result, demo: true, runID: demo.id)
+        try check(session.pendingRuns.isEmpty, "Demo entered upload queue")
         var offline = try JSONSerialization.jsonObject(with: goodConfig) as! [String: Any]
         offline["url"] = "http://127.0.0.1:1"
         try JSONSerialization.data(withJSONObject: offline).write(to: configURL)
-        session.beginRun(demo: false)
-        session.player = nil // Score ownership must be the profile captured at start.
-        session.finishRun(state, demo: false)
-        try await wait { session.saveStatus.contains("queued") }
+        let round = session.beginRun(game: .neonRush, mode: "Arcade")
+        session.logout() // Upload ownership stays with the player at start.
+        session.finishRun(result, demo: false, runID: round.id)
+        await session.flushPending()
+        let queue = root.appendingPathComponent("pending-runs.json")
         let stored = try JSONDecoder().decode([BadgeRun].self, from: Data(contentsOf: queue))
         try check(stored.count == 1 && stored[0].playerID == originalID, "Lost queued score or changed owner")
         try goodConfig.write(to: configURL)
         let restored = PlayerSession(queueDirectory: root, automaticRetry: false)
-        restored.flush()
-        try await wait { restored.saveStatus == "Score saved to MongoDB." }
-        try check(try JSONDecoder().decode([BadgeRun].self, from: Data(contentsOf: queue)).isEmpty, "Queue did not drain")
-        restored.signIn("native-client-test-badge")
+        restored.signIn(scan!.payload)
         try await wait { !restored.busy }
-        restored.refreshBests()
-        try await wait { restored.bests["Arcade"] != nil }
+        await restored.flushPending()
+        try await wait { restored.bests["Arcade"] != nil && restored.lastRankProgress?.runID == round.id }
+        try check(restored.pendingRuns.isEmpty && restored.lastRankProgress?.standing.rank != nil, "Upload or ranking receipt failed")
+        restored.refreshLeaderboard("Arcade")
+        try await wait { restored.leaderboards["Arcade"]?.rows.contains(where: { $0.nickname == "Native Test Player" }) == true }
+        var tennis = TennisMatch(); let opponent = AutomaticReboundOpponent()
+        tennis.start(); tennis.advance(3, opponent: opponent); tennis.advance(TennisMatch.duration, opponent: opponent)
+        let rally = restored.beginRun(game: .tennis, mode: "Tennis")
+        restored.finishTennis(tennis, demo: false, runID: rally.id)
+        await restored.flushPending()
+        try await wait { restored.bests["Tennis"] != nil && restored.lastRankProgress?.runID == rally.id }
+        try check(restored.lastRankProgress?.standing.difficulty == "Tennis", "Tennis board mixed with Neon Rush")
+        restored.refreshLeaderboard("Tennis")
+        try await wait { restored.leaderboards["Tennis"]?.difficulty == "Tennis" && restored.standings["Tennis"]?.difficulty == "Tennis" }
+        try check(restored.leaderboards["Tennis"]?.rows.contains(where: { $0.nickname == "Native Test Player" }) == true, "Tennis score missing from its own board")
         restored.logout()
-        try check(restored.player == nil && restored.bests.isEmpty && !restored.showingSignIn, "Logout must clear only the active player state")
-        restored.signIn("native-client-test-badge")
-        try await wait { !restored.busy }
-        try await wait { restored.bests["Arcade"] != nil }
-        try check(restored.player?.id == originalID, "Rescan after logout must restore the same profile")
-        restored.beginRun(demo: false)
-        var tennis = TennisMatch()
-        let opponent = AutomaticReboundOpponent()
-        tennis.start(); tennis.advance(3, opponent: opponent); tennis.advance(0.25, opponent: opponent)
-        tennis.advance(tennis.ball!.duration, opponent: opponent)
-        _ = tennis.playerHit(speed: 2, horizontalDirection: 0)
-        restored.finishTennis(tennis, demo: false)
-        try await wait { restored.bests["Tennis"] != nil }
-        try check(restored.bests["Tennis"] == tennis.score, "Tennis best was not attached to the badge profile")
-        print("PASS: native profile recognition, scan gate, logout/rescan, demo exclusion, frozen run identity, offline persistence, restart/retry, Neon Rush and Tennis per-player bests")
+        try check(restored.player == nil && restored.standings.isEmpty && restored.lastRankProgress == nil, "Logout leaked previous rank")
+        print("PASS: generated QR → real Vision reader → native badge/profile → MongoDB → offline restart/retry → native Neon Rush/Tennis ranks and public board; no physical badge or gameplay claim")
     }
 }

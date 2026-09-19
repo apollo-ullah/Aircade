@@ -1,7 +1,7 @@
 # Aircade
 
 Native macOS arcade: **hold an AirPod or iPhone and play motion-controlled games**. Includes Neon Rush, a 60-second Tennis rally challenge, two-player Saber Duel (AirPod + iPhone), and the original training lab.
-SwiftUI + SceneKit + Core Motion. No third-party dependencies. macOS 14+, Xcode / Swift 5.9+.
+SwiftUI + SceneKit + Core Motion. No third-party native dependencies; the optional badge station uses Node.js and MongoDB. macOS 14+, Xcode / Swift 5.9+.
 
 ## Connect once, switch games
 
@@ -13,7 +13,7 @@ Tennis is a 60-second arcade rally against an automatic returner. Actual racket-
 
 ## Badge profiles and local MongoDB
 
-Run `./scripts/start-station.sh` in a separate Terminal, then launch the app. **Guest play works immediately without the server.** Optionally open **Players & scores → Sign in with a badge** to create or retrieve a profile. Results are stored in local MongoDB; opted-in players appear at http://127.0.0.1:8787. Demo/scripted results are excluded. See [BADGE-STATION.md](BADGE-STATION.md) for setup, privacy, offline retries, tests, and LAN sharing.
+Run `./scripts/start-station.sh` in a separate Terminal, then launch the app. **Guest play works immediately without the server.** Optionally open **Leaderboard → Scan hacker badge** to create or retrieve a profile. Results are stored in local MongoDB; opted-in players appear at http://127.0.0.1:8787. Each game has its own board, personal bests, next-rival score targets, and post-round rank-climb feedback. Demo/scripted results are excluded. The station supports a local MongoDB installation or Docker Desktop. See [BADGE-STATION.md](BADGE-STATION.md) for setup, privacy, offline retries, tests, and LAN sharing.
 
 ## Launch
 

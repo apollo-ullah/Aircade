@@ -57,7 +57,8 @@ struct NeonRushView: View {
         .onChange(of: showingScripts) {
             if showingScripts { game.pause("Scripted test setup is open.") }
         }
-        .onChange(of: game.difficulty) { game.refreshBest() }
+        .onAppear { players.refreshLeaderboard(game.difficulty.rawValue) }
+        .onChange(of: game.difficulty) { game.refreshBest(); players.refreshLeaderboard(game.difficulty.rawValue) }
         .onChange(of: showingSetup) {
             if showingSetup { game.pause("Controller setup is open.") }
         }
@@ -127,6 +128,9 @@ struct NeonRushView: View {
                     Text("Best on this Mac")
                     Text(game.bestScore.formatted()).fontWeight(.bold).foregroundStyle(rushLime)
                 }.font(WiiTheme.body(14)).padding(14).wiiPanel()
+                if let standing = players.standings[game.difficulty.rawValue] {
+                    Text(standing.challenge).font(.callout).padding(16).frame(width: 300, alignment: .leading).wiiPanel()
+                }
                 Spacer()
                 if showHowTo { howToCard }
                 else {
@@ -263,12 +267,13 @@ struct NeonRushView: View {
             }.padding(.vertical, 6)
             Text(game.state.completed ? "You found your flow. Can you beat it?" : "Keep your cuts deliberate. The next run is yours.")
                 .font(.callout).foregroundStyle(.secondary)
+            RankProgressCard(players: players, runID: game.runID)
             Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
                 Button("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
                 Button("Next player") { game.leave(); players.nextPlayer() }
-                Button("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL) }
+                Button("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: game.state.difficulty.rawValue)) }
                 if motion.scriptedScenario != nil { Button("Change scripted test") { showingScripts = true } }
                 if !game.inputReady { Button("Connect controller") { showingSetup = true } }
             }.buttonStyle(.plain).foregroundStyle(.secondary).font(.callout)
@@ -283,12 +288,18 @@ struct NeonRushView: View {
         }
         return "\(game.state.difficulty.rawValue.uppercased()) · BEST ON THIS MAC \(game.bestScore.formatted())"
     }
-    private func overlayCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ZStack {
-            WiiTheme.accentDeep.opacity(0.22)
-            VStack(spacing: 22, content: content).padding(38).frame(width: 600)
-                .wiiPanel()
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(rushLime.opacity(0.15)))
+    private func overlayCard<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        GeometryReader { geometry in
+            ZStack {
+                WiiTheme.accentDeep.opacity(0.22)
+                ScrollView {
+                    VStack(spacing: 22, content: content).padding(38).frame(width: 600)
+                        .wiiPanel()
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(rushLime.opacity(0.15)))
+                        .padding(.vertical, 16)
+                        .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+                }.scrollIndicators(.hidden)
+            }
         }
     }
     private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {

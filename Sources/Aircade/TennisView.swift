@@ -33,6 +33,7 @@ struct TennisView: View {
             }
         }
         .foregroundStyle(WiiTheme.ink).background(WiiTheme.stageMid).tint(courtBlue)
+        .onAppear { players.refreshLeaderboard("Tennis") }
         .sheet(isPresented: $players.showingSignIn, onDismiss: {
             if restoreCamera && motion.useCamera { motion.startCamera() }
             restoreCamera = false
@@ -106,6 +107,9 @@ struct TennisView: View {
                             .font(.system(size: 30, weight: .bold)).monospacedDigit().foregroundStyle(courtBlue)
                         Text(players.player == nil ? "Best on this Mac" : "Saved to your badge profile").font(.caption).foregroundStyle(.secondary)
                     }.padding(16).frame(width: 300, alignment: .leading).wiiPanel()
+                    if let standing = players.standings["Tennis"] {
+                        Text(standing.challenge).font(.callout).padding(16).frame(width: 300, alignment: .leading).wiiPanel()
+                    }
                     Spacer()
                     VStack(alignment: .leading, spacing: 12) {
                         Text("AUTOMATIC OPPONENT").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(courtBlue)
@@ -195,20 +199,27 @@ struct TennisView: View {
                 stat("\(game.state.longestRally)", "BEST RALLY")
                 stat("\(game.state.accuracy)%", "ACCURACY")
             }
+            RankProgressCard(players: players, runID: game.runID)
             Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
                 Button("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
                 Button("Next player") { game.leave(); players.nextPlayer() }
-                Button("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL) }
+                Button("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: "Tennis")) }
             }.buttonStyle(.plain).foregroundStyle(.secondary)
         }
     }
 
-    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ZStack {
-            courtBlue.opacity(0.22)
-            VStack(spacing: 22, content: content).padding(38).frame(width: 600).wiiPanel()
+    private func card<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        GeometryReader { geometry in
+            ZStack {
+                courtBlue.opacity(0.22)
+                ScrollView {
+                    VStack(spacing: 22, content: content).padding(38).frame(width: 600).wiiPanel()
+                        .padding(.vertical, 16)
+                        .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+                }.scrollIndicators(.hidden)
+            }
         }
     }
     private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {

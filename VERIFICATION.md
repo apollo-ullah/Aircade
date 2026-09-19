@@ -151,3 +151,18 @@ Sound/effects were enabled for the Neon Rush win/defeat checks. The win's maximu
 The Mac release and signed generic iPhone device builds succeed; both signatures verify. The current iPhone companion must be installed to support role/feedback protocol changes. `devicectl` reports the previously trusted phone unavailable, so no updated installation or physical multi-game play-through is claimed. The old hardware success reported by the user remains evidence only for the previous build. Reconnect/unlock the iPhone to install `build/iOS/Build/Products/Debug-iphoneos/AircadeController.app`, then follow the acceptance sequence in the execution record.
 
 Guest play does not contact the badge service. MongoDB-backed integration was not exercised against a running database; isolated profile policy/transport tests do pass. The opponent remains deterministic, not trained/model-backed. Avatars, additional phones, external haptic motors, and physical grip/lag tuning remain deferred. The full plan's physical release gate is still open.
+
+
+## Badge scanner, leaderboard and rank progression — September 19
+
+169 Swift tests pass (79 MotionCore, 3 ControllerLink, 87 app-model). The new cases exercise the actual Vision QR reader with generated single/ambiguous/blank images, mode query propagation, rank targets, result attribution and logout. Logs: `/tmp/aircade-badge-tests.log`.
+
+`./scripts/check-station-client.sh` passes against a real local MongoDB 8 container. It runs the production native scanner and PlayerSession against a unique disposable test database: returning identity, nickname confirmation, immediate guest access, demo exclusion, round-start ownership, durable offline queue/restart/retry, receipt attribution, and distinct native Tennis/Neon Rush boards. Backend checks additionally cover opt-in visibility, real rank changes, ties, lower-score preservation, immutable retry receipts, conflicting run IDs and game/mode validation. The temporary test database is removed afterward. Log: `/tmp/aircade-native-station-check.log`.
+
+A final review found that native leaderboard queries accepted a mode argument without attaching it to the URL. The request builder now encodes query items, and both a focused regression and the real native station test check that Tennis receives Tennis data rather than the default Arcade board.
+
+Native populated leaderboard UI rendered and inspected at the minimum 1120 × 760 window size using a private in-memory fixture transport: `build/leaderboard-preview/leaderboard-preview.png`. Browser empty/game-switching and populated podium/table views inspected; browser fixture data came from a separate read-only preview server, not the live competition database. Result overlays can scroll at small window heights so the new rank card cannot hide replay/navigation actions. Web score links retain the selected game.
+
+The station is running on loopback port 8787 with persistent Docker storage. No real attendee scores or invented competitive scores were inserted. The source/build and integration tests establish software behavior; an actual badge/camera/lighting test, physical rank change and updated two-controller acceptance remain outstanding. See `BADGE-STATION.md` and `docs/FINALIST-READINESS.md` for those gates.
+
+The final release build and strict bundle signature verification pass. A final rendered Tennis check completed 60 seconds with 24 returns, zero misses, 10,040 points and zero queued scores; its updated results UI was inspected. Evidence: `build/badge-tennis-ui/tennis-smoke-result.json` and `tennis-results-ui.png`. This was explicitly simulated.

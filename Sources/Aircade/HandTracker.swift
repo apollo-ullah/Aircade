@@ -124,22 +124,17 @@ final class HandTracker: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         guard time - lastInference >= (scanBadges ? 0.25 : 1.0 / 30),
               let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastInference = time
+        let frameGeneration = generation
         if scanBadges {
-            let barcode = VNDetectBarcodesRequest()
-            barcode.symbologies = [.qr]
             let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up)
-            try? handler.perform([barcode])
-            // Ignore frames with multiple QR codes rather than pairing the wrong name.
-            let observation = barcode.results?.count == 1 ? barcode.results?.first : nil
-            let payload = observation?.payloadStringValue
-            let suggestedName = observation.flatMap { BadgeNameReader.read(using: handler, below: $0.boundingBox) }
+            let badge = BadgeScanner.read(using: handler)
             let input = CIImage(cvPixelBuffer: buffer)
             let image = imageContext.createCGImage(input, from: input.extent).map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.running, ProcessInfo.processInfo.systemUptime - time < 3 else { return }
+                guard let self, self.running, self.generation == frameGeneration, ProcessInfo.processInfo.systemUptime - time < 3 else { return }
                 self.preview = image
                 self.status = "Point the camera at your badge QR code"
-                if let payload { self.onBadge?(payload, suggestedName) }
+                if let badge { self.onBadge?(badge.payload, badge.suggestedName) }
             }
             return
         }
