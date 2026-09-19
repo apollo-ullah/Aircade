@@ -152,6 +152,6 @@ final class TrainingArena: ObservableObject {
         }
     }
     private func play(_ name: String) {
-        if sound { NSSound(named: NSSound.Name(name))?.play() }
+        if sound { GameAudio.shared.play(name) }
     }
 }
