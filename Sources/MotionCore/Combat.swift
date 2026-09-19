@@ -79,6 +79,28 @@ public enum CombatGeometry {
 
 /// Measure two deliberate tilts from the same neutral pose, then build a proper rotation basis.
 public enum GripCalibration {
+    public enum TiltIssue { case invalid, tooSmall, tooLarge, sameAxis }
+    public struct TiltAssessment {
+        public let degrees: Float
+        public let separationDegrees: Float?
+        public let issue: TiltIssue?
+        public var isValid: Bool { issue == nil }
+    }
+    /// Report the same acceptance limits used by the capture flow before the user presses Save.
+    public static func assessTilt(_ vector: SIMD3<Float>, comparedTo left: SIMD3<Float>? = nil) -> TiltAssessment {
+        let angle = simd_length(vector)
+        guard angle.isFinite else { return TiltAssessment(degrees: 0, separationDegrees: nil, issue: .invalid) }
+        let degrees = angle * 180 / .pi
+        guard angle > 0.25 else { return TiltAssessment(degrees: degrees, separationDegrees: nil, issue: .tooSmall) }
+        guard angle < 1.9 else { return TiltAssessment(degrees: degrees, separationDegrees: nil, issue: .tooLarge) }
+        guard let left else { return TiltAssessment(degrees: degrees, separationDegrees: nil, issue: nil) }
+        guard simd_length(left).isFinite, simd_length(left) > 0.25 else {
+            return TiltAssessment(degrees: degrees, separationDegrees: nil, issue: .invalid)
+        }
+        let similarity = min(1, abs(simd_dot(simd_normalize(left), simd_normalize(vector))))
+        let separation = acos(similarity) * 180 / .pi
+        return TiltAssessment(degrees: degrees, separationDegrees: separation, issue: similarity >= 0.75 ? .sameAxis : nil)
+    }
     public static func rotationVector(reference: simd_quatf, sample: simd_quatf) -> SIMD3<Float> {
         var delta = simd_normalize(reference.inverse * sample)
         if delta.real < 0 { delta = simd_quatf(vector: -delta.vector) }
