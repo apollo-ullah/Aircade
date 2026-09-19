@@ -21,7 +21,7 @@ await mongo.connect();
 const db = mongo.db(process.env.MONGODB_DB || 'aircade');
 const players = db.collection('players'), runs = db.collection('runs');
 await players.createIndex({ badgeKey: 1 }, { unique: true });
-await runs.createIndex({ playerID: 1, difficulty: 1, score: -1 });
+await runs.createIndex({ playerID: 1, game: 1, difficulty: 1, score: -1 });
 const app = express();
 app.disable('x-powered-by');
 app.use((req, res, next) => {
@@ -63,20 +63,20 @@ app.get('/api/players/:id/bests', auth, asyncRoute(async (req, res) => {
 app.post('/api/runs', auth, asyncRoute(async (req, res) => {
   const b = req.body;
   const integer = (x, max) => Number.isInteger(x) && x >= 0 && x <= max;
-  if (!validID(b.id) || !validID(b.playerID) || !['Chill', 'Arcade'].includes(b.difficulty) || !integer(b.score, 1000000) || !integer(b.cuts, 1000) || !integer(b.bestCombo, b.cuts) || !integer(b.accuracy, 100) || typeof b.completed !== 'boolean' || b.isDemo !== false || typeof b.gameVersion !== 'string' || b.gameVersion.length > 40) return res.status(400).json({ error: 'Invalid run; demos and scripted runs are not ranked' });
+  if (!validID(b.id) || !validID(b.playerID) || !['Chill', 'Arcade', 'Tennis'].includes(b.difficulty) || (b.game != null && !['Neon Rush', 'Tennis'].includes(b.game)) || !integer(b.score, 1000000) || !integer(b.cuts, 1000) || !integer(b.bestCombo, b.cuts) || !integer(b.accuracy, 100) || typeof b.completed !== 'boolean' || b.isDemo !== false || typeof b.gameVersion !== 'string' || b.gameVersion.length > 40) return res.status(400).json({ error: 'Invalid run; demos and scripted runs are not ranked' });
   if (!await players.findOne({ _id: b.playerID })) return res.status(404).json({ error: 'Player not found' });
-  const run = { _id: b.id, playerID: b.playerID, difficulty: b.difficulty, score: b.score, cuts: b.cuts, bestCombo: b.bestCombo, accuracy: b.accuracy, completed: b.completed, gameVersion: b.gameVersion, stationID: config.stationID };
+  const run = { _id: b.id, playerID: b.playerID, game: b.game || 'Neon Rush', difficulty: b.difficulty, score: b.score, cuts: b.cuts, bestCombo: b.bestCombo, accuracy: b.accuracy, completed: b.completed, gameVersion: b.gameVersion, stationID: config.stationID };
   try { await runs.insertOne({ ...run, createdAt: new Date() }); }
   catch (e) {
     if (e.code !== 11000) throw e;
     const existing = await runs.findOne({ _id: b.id });
-    if (Object.keys(run).some(k => existing[k] !== run[k])) return res.status(409).json({ error: 'Run ID already used with different data' });
+    if (Object.keys(run).some(k => (k === 'game' ? existing[k] || 'Neon Rush' : existing[k]) !== run[k])) return res.status(409).json({ error: 'Run ID already used with different data' });
   }
   res.json({ saved: true });
 }));
 app.get('/api/leaderboard', asyncRoute(async (req, res) => {
   const difficulty = req.query.difficulty || 'Arcade';
-  if (!['Chill', 'Arcade'].includes(difficulty)) return res.status(400).json({ error: 'Invalid difficulty' });
+  if (!['Chill', 'Arcade', 'Tennis'].includes(difficulty)) return res.status(400).json({ error: 'Invalid difficulty' });
   const rows = await runs.aggregate([
     { $match: { difficulty } }, { $sort: { score: -1, createdAt: 1, _id: 1 } },
     { $group: { _id: '$playerID', score: { $first: '$score' }, accuracy: { $first: '$accuracy' }, bestCombo: { $first: '$bestCombo' }, achievedAt: { $first: '$createdAt' } } },
@@ -88,5 +88,6 @@ app.get('/api/leaderboard', asyncRoute(async (req, res) => {
 }));
 app.use(express.static(path.join(root, 'public')));
 app.use((err, req, res, next) => { res.status(err.status === 400 ? 400 : 500).json({ error: err.status === 400 ? 'Invalid request' : 'Database request failed; try again' }); });
-const server = app.listen(Number(process.env.PORT || 8787), process.env.HOST || '127.0.0.1', () => console.log('Aircade API and leaderboard: http://127.0.0.1:8787'));
+const port = Number(process.env.PORT || 8787), host = process.env.HOST || '127.0.0.1';
+const server = app.listen(port, host, () => console.log(`Aircade API and leaderboard: http://${host}:${port}`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(async () => { await mongo.close(); process.exit(0); }));

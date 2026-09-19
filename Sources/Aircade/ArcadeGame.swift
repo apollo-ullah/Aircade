@@ -132,9 +132,9 @@ final class ArcadeGame: ObservableObject {
         if renderingEnabled { scene.syncRush(targets: state.targets, elapsed: state.elapsed) }
     }
     func tick() {
+        guard enabled else { return }
         pollInput?()
         let t = now; let dt = t - lastTick; lastTick = t
-        guard enabled else { return }
         maxFrameSeconds = max(maxFrameSeconds, dt)
         if feedbackUntil < t && !feedback.isEmpty { feedback = "" }
         if state.phase == .playing || state.phase == .countdown {

@@ -12,6 +12,7 @@ struct BadgePlayer: Codable {
 struct BadgeRun: Codable {
     var id: String
     var playerID: String
+    var game: String? = nil
     var difficulty: String
     var score: Int
     var cuts: Int
@@ -67,9 +68,17 @@ final class PlayerSession: ObservableObject {
     func finishRun(_ state: NeonRush, demo: Bool) {
         guard !demo, let identity = runIdentity else { return }
         runIdentity = nil
-        pending.append(BadgeRun(id: identity.id, playerID: identity.playerID, difficulty: state.difficulty.rawValue,
+        pending.append(BadgeRun(id: identity.id, playerID: identity.playerID, game: "Neon Rush", difficulty: state.difficulty.rawValue,
                                score: state.score, cuts: state.cuts, bestCombo: state.bestCombo, accuracy: state.accuracy,
-                               completed: state.completed, isDemo: false, gameVersion: "0.4.0"))
+                               completed: state.completed, isDemo: false, gameVersion: "0.5.0"))
+        persistQueue(); flush()
+    }
+    func finishTennis(_ state: TennisMatch, demo: Bool) {
+        guard !demo, let identity = runIdentity else { return }
+        runIdentity = nil
+        pending.append(BadgeRun(id: identity.id, playerID: identity.playerID, game: "Tennis", difficulty: "Tennis",
+                               score: state.score, cuts: state.returns, bestCombo: state.longestRally, accuracy: state.accuracy,
+                               completed: state.completed, isDemo: false, gameVersion: "0.5.0"))
         persistQueue(); flush()
     }
     private func persistQueue() {

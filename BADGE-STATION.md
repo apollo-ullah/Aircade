@@ -33,13 +33,13 @@ A camera is only opened after pressing Start camera. Frames are processed locall
 ## Storage and configuration
 
 - MongoDB `players`: opaque ID, server-keyed badge digest, nickname, visibility, creation time.
-- MongoDB `runs`: unique run ID, player ID, scores, difficulty, station ID, version and server receipt time.
+- MongoDB `runs`: unique run ID, player ID, game, scores, difficulty, station ID, version and server receipt time.
 - Raw QR payloads are SHA-256 hashed on the Mac and HMAC-keyed by the server before storage. They are not logged, persisted or exposed publicly. Keep `.local/station.json` backed up alongside MongoDB: its badge secret is required to recognize returning badges.
 - `.local/station.json` is generated once with a private station bearer token, URL and identity. It is ignored by Git and owner-readable. The built app in `build/Aircade.app` locates this beside the repo. If moving the app elsewhere, set `AIRCADE_STATION_CONFIG` to that file's absolute path when launching it.
 - Pending run uploads are atomically queued at `~/Library/Application Support/Aircade/pending-runs.json` and retried every 15 seconds, including after restart. Unique run IDs make retries idempotent. New badge recognition requires the local server/MongoDB to be available; a running round can finish and queue its score if they go down.
 - Change `MONGODB_URI` / `MONGODB_DB` on the API server to select a different database. Avoid switching databases while uploads are pending.
 
-The station token authorizes profile edits and score submissions. Browser clients have read-only access to the public leaderboard, which exposes only opted-in nicknames, rank and score statistics. Best scores are grouped by player, with separate Chill and Arcade boards; ties use the earliest server receipt time. Static QR recognition is convenient identification, not strong authentication. Anyone holding a copy of a badge code at an authorized station can impersonate its owner. Scores are trusted station submissions, not cryptographic proof of gameplay.
+The station token authorizes profile edits and score submissions. Browser clients have read-only access to the public leaderboard, which exposes only opted-in nicknames, rank and score statistics. Best scores are grouped by player, with separate Neon Rush Chill, Neon Rush Arcade and Tennis boards; ties use the earliest server receipt time. Static QR recognition is convenient identification, not strong authentication. Anyone holding a copy of a badge code at an authorized station can impersonate its owner. Scores are trusted station submissions, not cryptographic proof of gameplay.
 
 ## Sharing the leaderboard
 
@@ -53,7 +53,7 @@ The native Swift build is checked separately. Physical badge recognition, AirPod
 
 ## Sample leaderboard data
 
-To add three clearly labeled test profiles and seven completed runs to the local `aircade` database:
+To add three clearly labeled test profiles and ten completed runs to the local `aircade` database:
 
 ```sh
 cd ~/dev/repos/Aircade/server

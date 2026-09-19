@@ -41,18 +41,18 @@ public enum CombatGeometry {
 
     /// Subdivide both rotational and translational motion so fast strokes do not tunnel through a block.
     public static func sweep(from previous: SaberPose, to current: SaberPose, dt: Double,
-                             center: SIMD3<Float>, half: SIMD3<Float>) -> BladeContact? {
+                             center: SIMD3<Float>, half: SIMD3<Float>, length: Float = bladeLength) -> BladeContact? {
         guard dt > 0, dt <= 0.15 else { return nil }
         let angle = 2 * acos(min(1, abs(simd_dot(previous.orientation.vector, current.orientation.vector))))
-        let travel = simd_distance(previous.position, current.position) + angle * bladeLength
+        let travel = simd_distance(previous.position, current.position) + angle * length
         let steps = max(1, min(256, Int(ceil(travel / 0.035))))
         for i in 0...steps {
             let f = Float(i) / Float(steps)
             let pose = SaberPose(position: simd_mix(previous.position, current.position, SIMD3<Float>(repeating: f)),
                                  orientation: simd_slerp(previous.orientation, current.orientation, f))
-            if let along = segmentBox(from: pose.point(0.12), to: pose.point(bladeLength),
+            if let along = segmentBox(from: pose.point(0.12), to: pose.point(length),
                                       center: center, half: half + SIMD3<Float>(repeating: 0.045)) {
-                let distance = 0.12 + along * (bladeLength - 0.12)
+                let distance = 0.12 + along * (length - 0.12)
                 let velocity = (current.point(distance) - previous.point(distance)) / Float(dt)
                 let speed = simd_length(velocity)
                 let direction = pose.orientation.act(SIMD3<Float>(0, 1, 0))

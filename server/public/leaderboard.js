@@ -6,6 +6,7 @@ async function refresh() {
     if (!response.ok) throw new Error();
     const data = await response.json();
     if (request !== sequence) return;
+    document.querySelector('#combo-heading').textContent = mode === 'Tennis' ? 'Longest rally' : 'Best combo';
     document.querySelector('#scores').replaceChildren(...data.rows.map(row => {
       const tr = document.createElement('tr');
       for (const value of [row.rank, row.nickname, row.score.toLocaleString(), `${row.accuracy}%`, row.bestCombo]) {

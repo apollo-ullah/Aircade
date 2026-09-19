@@ -42,13 +42,15 @@ test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards'
     assert.equal((await request('/api/runs', 'POST', { ...run, score: 901 })).status, 409);
     await request('/api/runs', 'POST', { ...run, id: randomUUID(), score: 300 });
     await request('/api/runs', 'POST', { ...run, id: randomUUID(), difficulty: 'Chill', score: 1200 });
+    await request('/api/runs', 'POST', { ...run, id: randomUUID(), game: 'Tennis', difficulty: 'Tennis', score: 1800, cuts: 9, bestCombo: 5, accuracy: 90 });
     const privatePlayer = (await request('/api/sign-in', 'POST', { badgeDigest: 'b'.repeat(64) })).body;
     await request('/api/runs', 'POST', { ...run, id: randomUUID(), playerID: privatePlayer.id, score: 5000 });
     const board = (await request('/api/leaderboard', 'GET', undefined, false)).body;
     assert.equal(board.rows.length, 1); assert.equal(board.rows[0].score, 900); assert.equal(board.rows[0].rank, 1);
     assert.deepEqual(Object.keys(board.rows[0]).sort(), ['accuracy', 'bestCombo', 'nickname', 'rank', 'score']);
     assert.equal((await request('/api/leaderboard?difficulty=Chill')).body.rows[0].score, 1200);
-    assert.deepEqual((await request(`/api/players/${a.id}/bests`)).body, { Arcade: 900, Chill: 1200 });
+    assert.equal((await request('/api/leaderboard?difficulty=Tennis')).body.rows[0].score, 1800);
+    assert.deepEqual((await request(`/api/players/${a.id}/bests`)).body, { Arcade: 900, Chill: 1200, Tennis: 1800 });
     await request('/api/players/' + a.id, 'PATCH', { nickname: 'Test Player', isPublic: false });
     assert.equal((await request('/api/leaderboard')).body.rows.length, 0);
     await mongo.connect();
