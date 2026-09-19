@@ -9,6 +9,7 @@ struct NeonRushView: View {
     @ObservedObject var game: ArcadeGame
     @State private var showingSetup = false
     @State private var showHowTo = false
+    @State private var showingScripts = false
 
     var body: some View {
         ZStack {
@@ -36,6 +37,12 @@ struct NeonRushView: View {
         .background(Color(red: 0.025, green: 0.035, blue: 0.045))
         .sheet(isPresented: $showingSetup) {
             ControllerSetupView(motion: motion, done: { showingSetup = false })
+        }
+        .sheet(isPresented: $showingScripts) {
+            ScriptedControllerSetup(motion: motion, done: { showingScripts = false })
+        }
+        .onChange(of: showingScripts) {
+            if showingScripts { game.pause("Scripted test setup is open.") }
         }
         .onChange(of: game.difficulty) { game.refreshBest() }
         .onChange(of: showingSetup) {
@@ -126,10 +133,11 @@ struct NeonRushView: View {
                 }
             }
             HStack(spacing: 12) {
-                Label(game.inputReady ? "Controller ready" : "Start AirPods in Controller setup", systemImage: game.inputReady ? "checkmark.circle.fill" : "circle")
+                Label(game.inputReady ? "\(motion.controllerName) ready" : "Start AirPods in Controller setup", systemImage: game.inputReady ? "checkmark.circle.fill" : "circle")
                 Text("·")
                 Text("R to recenter")
                 Spacer()
+                Button("Scripted saber tests") { showingScripts = true }.buttonStyle(.plain)
                 Button("Open test lab") { motion.showLab(true) }.buttonStyle(.plain)
                 Text("LOCAL PLAY / V0.3").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.3))
             }.font(.caption).foregroundStyle(.white.opacity(0.5)).padding(.top, 18)
@@ -183,8 +191,13 @@ struct NeonRushView: View {
     private var playFooter: some View {
         HStack {
             Text("NEON RUSH").font(.system(size: 12, weight: .black, design: .rounded)).italic().tracking(1)
-            if game.isDemo { Text("DEMO · NO HIGH SCORE").foregroundStyle(.orange).font(.system(size: 10, weight: .bold, design: .monospaced)) }
+            if game.isDemo { Text(motion.scriptedScenario == nil ? "DEMO · NO HIGH SCORE" : "SCRIPTED · NO HIGH SCORE").foregroundStyle(.orange).font(.system(size: 10, weight: .bold, design: .monospaced)) }
             Spacer()
+            if let script = motion.scriptedScenario {
+                Button("Change test") { showingScripts = true }.font(.caption).buttonStyle(.bordered)
+                    .help(script.rawValue)
+            }
+            ControllerIdentityBadge(motion: motion)
             Text("R  RECENTER     SPACE  PAUSE").font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
             Button { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }.buttonStyle(.plain)
         }.padding(24).background(LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom))
@@ -200,11 +213,12 @@ struct NeonRushView: View {
         overlayCard {
             Text("TAKE A BREATH.").font(.system(size: 42, weight: .black, design: .rounded)).italic()
             Text(game.pauseReason).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Label(game.inputReady ? "Controller ready" : "Waiting for controller", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
+            Label(game.inputReady ? "\(motion.controllerName) ready" : "Waiting for \(motion.controllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 .foregroundStyle(game.inputReady ? rushLime : .orange).font(.callout)
             actionButton("BACK TO THE RUSH") { game.resume() }.disabled(!game.inputReady)
             HStack(spacing: 22) {
                 Button("Controller setup") { showingSetup = true }
+                Button("Scripted test") { showingScripts = true }
                 Button("End run") { game.leave() }
             }.buttonStyle(.plain).foregroundStyle(.secondary).font(.callout)
         }
@@ -216,7 +230,7 @@ struct NeonRushView: View {
                 Text(game.state.completed ? game.state.rank : "↻").font(.system(size: 90, weight: .black, design: .rounded)).italic().foregroundStyle(rushLime)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(game.state.score.formatted()).font(.system(size: 54, weight: .black, design: .rounded)).monospacedDigit()
-                    Text(game.newRecord ? "NEW PERSONAL BEST" : game.isDemo ? "DEMO RUN · SCORE NOT SAVED" : "\(game.state.difficulty.rawValue.uppercased()) · BEST \(game.bestScore.formatted())")
+                    Text(game.newRecord ? "NEW PERSONAL BEST" : game.isDemo ? (motion.scriptedScenario == nil ? "DEMO RUN · SCORE NOT SAVED" : "SCRIPTED RUN · SCORE NOT SAVED") : "\(game.state.difficulty.rawValue.uppercased()) · BEST \(game.bestScore.formatted())")
                         .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(game.newRecord ? rushLime : .secondary)
                 }
             }
@@ -230,6 +244,7 @@ struct NeonRushView: View {
             actionButton("ONE MORE RUN") { game.start(demo: motion.simulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
                 Button("Back to Aircade") { game.leave() }
+                if motion.scriptedScenario != nil { Button("Change scripted test") { showingScripts = true } }
                 if !game.inputReady { Button("Connect controller") { showingSetup = true } }
             }.buttonStyle(.plain).foregroundStyle(.secondary).font(.callout)
         }
@@ -251,10 +266,7 @@ struct NeonRushView: View {
     }
     private var brand: some View { Text("aircade").font(.system(size: 26, weight: .black, design: .rounded)).tracking(-1).padding(.trailing, 12) }
     private var connectionPill: some View {
-        HStack(spacing: 7) {
-            Circle().fill(game.inputReady ? rushLime : .orange).frame(width: 6, height: 6)
-            Text(motion.simulated ? "DEMO INPUT" : game.inputReady ? "READY" : "NO MOTION").font(.system(size: 10, weight: .bold, design: .monospaced))
-        }.padding(11).background(.black.opacity(0.5), in: Capsule())
+        ControllerIdentityBadge(motion: motion)
     }
     private func menuStat(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -306,21 +318,22 @@ private struct ControllerSetupContent: View {
                             Text("Permission: \(motion.authorization) · \(motion.samples) samples · \(Int(motion.frequency)) Hz")
                                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
+                        ControllerSourceStatus(motion: motion)
                         if motion.waitingForMotion {
                             Text("Bluetooth can be connected while the motion stream is idle. In Mac Bluetooth settings, disconnect and reconnect your AirPods, briefly wear them, then click Reconnect AirPods above. Keep Automatic Ear Detection off for handheld play.")
                                 .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                        } else if motion.samples > 0 && motion.sampleAge < 0.5 && !motion.simulated {
+                        } else if motion.samples > 0 && motion.hasFreshMotion && !motion.simulated {
                             Label("Receiving \(motion.source) AirPod motion. Recenter your grip, then press Done to play.", systemImage: "checkmark.circle.fill")
                                 .font(.caption).foregroundStyle(rushLime)
                         }
                     }
-                    setupStep("02", "Match three poses") {
-                        Text(motion.hasGripCalibration ? "Your grip is saved. Recalibrate if the earbud has moved in your fingers." : "Follow the animated guide so left, right, and forward feel natural.")
+                    setupStep("02", "Calibrate and test your grip") {
+                        Text(motion.hasGripCalibration ? "Grip saved for your \(motion.controllerName). Recalibrate if it has moved in your fingers." : "Follow the animated guide so left, right, and forward feel natural.")
                             .font(.callout).foregroundStyle(.secondary)
                         HStack {
-                            Button(motion.hasGripCalibration ? "Recalibrate grip" : "Calibrate grip") { motion.beginGripCalibration() }
-                                .disabled(!motion.running || motion.simulated || motion.sampleAge > 0.25)
-                            Button("Recenter [R]") { motion.recenter() }.disabled(!motion.running || motion.sampleAge > 0.25)
+                            Button(motion.calibrationButtonTitle) { motion.beginGripCalibration() }
+                                .disabled(!motion.hasFreshMotion || motion.simulated)
+                            Button("Recenter [R]") { motion.recenter() }.disabled(!motion.hasFreshMotion)
                         }
                     }
                     setupStep("03", "Add hand movement · optional") {
@@ -343,7 +356,7 @@ private struct ControllerSetupContent: View {
                             HStack { Text("Travel").font(.caption); Slider(value: $motion.cameraGain, in: 2...9) }
                         }
                     }
-                    Text("Keep the earbud secure. Start with controlled wrist movements. R recenters your grip; a tracking interruption pauses the game.").font(.caption).foregroundStyle(.secondary)
+                    Text("Keep the earbud secure. Use comfortable wrist or forearm tilts. R recenters your grip; a tracking interruption pauses the game.").font(.caption).foregroundStyle(.secondary)
                     Button("Open test lab & diagnostics") { done(); motion.showLab(true) }.buttonStyle(.plain).foregroundStyle(rushLime)
                 }
             }
@@ -354,5 +367,22 @@ private struct ControllerSetupContent: View {
             HStack { Text(number).foregroundStyle(rushLime).font(.system(size: 12, weight: .bold, design: .monospaced)); Text(title).font(.headline) }
             content()
         }.padding(17).frame(maxWidth: .infinity, alignment: .leading).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 13))
+    }
+}
+
+/// Shared source identity and explicit handover in both game setup and the lab.
+struct ControllerSourceStatus: View {
+    @ObservedObject var motion: MotionModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ControllerIdentityBadge(motion: motion, compact: false)
+            if motion.sourceMismatch {
+                Text("\(motion.controllerLabel). macOS changed the sensor. Hold the selected earbud, or explicitly choose the new one. Calibration restarts when you switch.")
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+                if motion.canAdoptIncomingSource {
+                    Button("Use \(motion.incomingSource) AirPod instead") { motion.adoptIncomingSource() }
+                }
+            }
+        }.foregroundStyle(motion.sourceMismatch ? Color.orange : Color(red: 0.35, green: 0.93, blue: 0.91))
     }
 }

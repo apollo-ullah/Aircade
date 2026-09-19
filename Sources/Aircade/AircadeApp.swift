@@ -13,12 +13,24 @@ struct AircadeApp: App {
                 .onAppear {
                     NSApp.setActivationPolicy(.regular)
                     NSApp.activate(ignoringOtherApps: true)
-                    if CommandLine.arguments.contains("--calibration-preview") {
+                    if CommandLine.arguments.contains("--calibration-preview") || CommandLine.arguments.contains("--simple-calibration-preview") {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             var previews: [(Int, NSWindow, NSView)] = []
-                            for step in 1...3 {
-                                let panel = CalibrationGuidePanel(step: step, status: "Illustration preview — not live sensor data", isLive: true, previewTime: 3.2)
+                            let simple = CommandLine.arguments.contains("--simple-calibration-preview")
+                            for step in 1...(simple ? 4 : 6) {
+                                let detailedPanel = CalibrationGuidePanel(step: min(step, 5), status: "Synthetic UI preview", isLive: step != 6,
+                                    activeSource: "Left", tiltDegrees: step == 1 ? nil : step == 3 ? 0 : step == 5 ? 26 : 30,
+                                    poseHint: step == 6 ? "macOS is sending Right motion. Your Left calibration is paused. Choose which earbud to use." : step == 5 ? "UI PREVIEW · synthetic data. Test the blade, then return upright to save." : "UI PREVIEW · synthetic data. Steady pose, ready to continue.", poseReady: step < 5,
+                                    previewTime: 3.2, rotationSpeed: 0.12,
+                                    liveOrientation: step == 5 ? simd_quatf(angle: 0.45, axis: SIMD3<Float>(0, 0, 1)) : nil,
+                                    sourceWarning: step == 6 ? "Selected: Left · macOS reporting: Right" : nil,
+                                    adoptSourceTitle: step == 6 ? "Use Right instead & restart" : nil,
+                                    restart: {}, useSaved: {})
                                     .environment(\.colorScheme, .dark)
+                                let panel = simple ? AnyView(SimpleCalibrationPanel(step: min(step, 3), source: step == 2 ? "Right" : "Left", isLive: step != 4,
+                                    message: "UI PREVIEW • synthetic data. Click to save this angle.",
+                                    sourceWarning: step == 4 ? "Selected: Left · macOS reporting: Right" : nil,
+                                    switchTitle: step == 4 ? "Calibrate Right AirPod instead" : nil, previewTime: 3.2)) : AnyView(detailedPanel)
                                 let host = NSHostingView(rootView: panel)
                                 let size = host.fittingSize
                                 let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
@@ -34,7 +46,7 @@ struct AircadeApp: App {
                                     if let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
                                         host.cacheDisplay(in: host.bounds, to: bitmap)
                                         if let data = bitmap.representation(using: .png, properties: [:]) {
-                                            try? data.write(to: motion.logDirectory.appendingPathComponent("calibration-step-\(step).png"))
+                                            try? data.write(to: motion.logDirectory.appendingPathComponent("\(simple ? "simple-calibration" : "calibration")-step-\(step).png"))
                                         }
                                     }
                                     window.orderOut(nil)
@@ -43,7 +55,15 @@ struct AircadeApp: App {
                             }
                         }
                     }
-                    if CommandLine.arguments.contains("--live-test") { motion.start() }
+                    if CommandLine.arguments.contains("--simple-calibration") {
+                        motion.showLab(true)
+                        motion.start()
+                        motion.openCalibrationWhenReady = true
+                    } else if CommandLine.arguments.contains("--live-test") { motion.start() }
+                    if CommandLine.arguments.contains("--scripted-repro") { ScriptedGameCheck.run(motion, reproduce: true) }
+                    if CommandLine.arguments.contains("--scripted-game-test") { ScriptedGameCheck.run(motion) }
+                    if CommandLine.arguments.contains("--scripted-demo") { motion.startScripted(.perfectRun) }
+                    if CommandLine.arguments.contains("--scripted-setup-preview") { ScriptedGameCheck.previewSetup(motion) }
                     if CommandLine.arguments.contains("--game-smoke-test") { GameSmoke.run(motion) }
                     if CommandLine.arguments.contains("--smoke-test") {
                         motion.showLab(true)
@@ -77,7 +97,9 @@ struct AircadeApp: App {
                     motion.stop(); motion.camera.stop()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                    motion.game.pause("Paused while Aircade was in the background.")
+                    if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") {
+                        motion.game.pause("Paused while Aircade was in the background.")
+                    }
                 }
         }
         .defaultSize(width: 1340, height: 900)
@@ -193,7 +215,7 @@ struct ArenaLayout: View {
                 Text("TRAINING ARENA   /   PROTOTYPE 02").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
             }
             Spacer()
-            Circle().fill(arena.inputReady ? cyan : .orange).frame(width: 8, height: 8)
+            ControllerIdentityBadge(motion: motion)
             Text(motion.status).font(.caption).lineLimit(2).frame(maxWidth: 260, alignment: .leading)
             Button(motion.running && !motion.simulated ? "Restart AirPods" : "Start AirPods") { motion.start() }
                 .buttonStyle(.borderedProminent).tint(cyan).foregroundStyle(.black)
@@ -203,7 +225,7 @@ struct ArenaLayout: View {
     }
     private var inputHint: String {
         if !motion.running { return "Start AirPods, or use the demo to test the arena" }
-        if motion.calibrationStep > 0 { return "Complete the grip calibration on the right" }
+        if motion.calibrationStep > 0 { return "Complete the grip setup window" }
         if motion.sampleAge > 0.5 { return "Waiting for fresh AirPod motion" }
         if !motion.calibrated { return "Hold the grip upright and press R to recenter" }
         if motion.useCamera && camera.point == nil { return "Show your controller hand to the camera" }
@@ -226,10 +248,11 @@ struct ArenaLayout: View {
             }
         }
         section("02  /  MAP YOUR GRIP") {
+            ControllerSourceStatus(motion: motion)
             Text(motion.calibrationMessage).font(.callout)
             if motion.calibrationStep == 0 {
-                Button(motion.hasGripCalibration ? "Recalibrate grip" : "Calibrate grip — 3 poses") { motion.beginGripCalibration() }
-                    .disabled(!motion.running || motion.simulated || motion.sampleAge > 0.5)
+                Button(motion.calibrationButtonTitle) { motion.beginGripCalibration() }
+                    .disabled(!motion.hasFreshMotion || motion.simulated)
             } else {
                 Text("Follow the animated setup window.").font(.caption).foregroundStyle(cyan)
             }

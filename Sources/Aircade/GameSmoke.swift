@@ -49,7 +49,7 @@ enum GameSmoke {
             }
         }
     }
-    private static func capture(_ motion: MotionModel, name: String) {
+    static func capture(_ motion: MotionModel, name: String) {
         if let content = NSApp.windows.first?.contentView,
            let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) {
             content.cacheDisplay(in: content.bounds, to: bitmap)
