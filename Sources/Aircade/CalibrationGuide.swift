@@ -47,7 +47,7 @@ struct CalibrationGuidePanel: View {
     var useSaved: (() -> Void)? = nil
     var adoptSource: () -> Void = {}
     @State private var animationStart = Date()
-    private let cyan = SportsTheme.blue
+    private let cyan = WiiTheme.accentDeep
     private var labels: [String] { ["Start", "Left", "Return", "Forward", "Test"] }
     private var illustrationStep: Int { step == 2 ? 2 : step == 4 ? 3 : 1 }
     private var title: String {
@@ -169,7 +169,7 @@ struct CalibrationGuidePanel: View {
                     .disabled(!isLive || !poseReady)
             }
         }.padding(26).frame(width: 700, height: 740)
-            .background(SportsTheme.paper).preferredColorScheme(.light)
+            .background(WiiTheme.stageMid).preferredColorScheme(.light)
             .onChange(of: step) { animationStart = Date() }
     }
 }
@@ -178,7 +178,7 @@ struct CalibrationGuidePanel: View {
 /// animation is mixed into the live feedback, and no gain is applied to the angle.
 struct CalibrationBladePreview: View {
     let orientation: simd_quatf?
-    private let cyan = SportsTheme.blue
+    private let cyan = WiiTheme.accentDeep
     var body: some View {
         Canvas { context, size in
             let direction = orientation?.act(SIMD3<Float>(0, 1, 0)) ?? SIMD3<Float>(0, 1, 0)
@@ -188,7 +188,7 @@ struct CalibrationBladePreview: View {
                 let tip = CGPoint(x: center.x + CGFloat(index == 0 ? direction.x : -direction.z) * length,
                                   y: center.y - CGFloat(direction.y) * length)
                 var neutral = Path(); neutral.move(to: center); neutral.addLine(to: CGPoint(x: center.x, y: center.y - length))
-                context.stroke(neutral, with: .color(SportsTheme.ink.opacity(0.2)), style: StrokeStyle(lineWidth: 2, dash: [4, 5]))
+                context.stroke(neutral, with: .color(WiiTheme.ink.opacity(0.2)), style: StrokeStyle(lineWidth: 2, dash: [4, 5]))
                 var blade = Path(); blade.move(to: center); blade.addLine(to: tip)
                 context.stroke(blade, with: .color(cyan.opacity(0.2)), style: StrokeStyle(lineWidth: 16, lineCap: .round))
                 context.stroke(blade, with: .color(orientation == nil ? .gray : cyan), style: StrokeStyle(lineWidth: 5, lineCap: .round))
@@ -209,7 +209,7 @@ struct CalibrationBladePreview: View {
 struct GripAnimation: View {
     let step: Int
     let elapsed: Double
-    private let cyan = SportsTheme.blue
+    private let cyan = WiiTheme.accentDeep
 
     private var phase: (amount: Double, text: String) {
         if step == 1 { return (0, "HOLD UPRIGHT") }
@@ -289,7 +289,7 @@ struct GripAnimation: View {
                 context.draw(Text(step == 2 ? "← YOUR LEFT" : "TOP ↑").font(.system(size: 12, weight: .semibold)).foregroundColor(cyan),
                              at: CGPoint(x: step == 2 ? 98 : origin.x, y: step == 2 ? 159 : 65))
             }
-            context.draw(Text(phase.text).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(SportsTheme.ink),
+            context.draw(Text(phase.text).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(WiiTheme.ink),
                          at: CGPoint(x: size.width / 2, y: 271))
         }
         .accessibilityLabel(step == 1 ? "Hold your imaginary handle upright in a fixed grip." : step == 2 ? "From your point of view, the top leans 45 degrees left with the AirPod fixed in your grip. Your forearm can move too." : "Side view: you are on the left and your Mac is on the right. From upright, the top leans 45 degrees toward your Mac.")

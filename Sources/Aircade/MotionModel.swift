@@ -231,7 +231,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
 
     func startScripted(_ scenario: SaberScript) {
         stop()
-        showLab(false)
+        showLab(false, notify: false)
         useCamera = false; simulated = true; running = true; calibrated = true
         scriptedScenario = scenario; scriptController = ScriptedSaber(scenario)
         source = "Simulated"; incomingSource = "Simulated"

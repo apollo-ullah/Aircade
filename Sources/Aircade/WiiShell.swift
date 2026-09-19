@@ -37,10 +37,13 @@ struct WiiShell: View {
                 pointer.ingestMouse(CGPoint(x: location.x / geo.size.width,
                                             y: location.y / geo.size.height))
             }
-            .onChange(of: motion.quaternion) { _ in feedPointer() }
-            .onChange(of: motion.sampleAge) { _ in feedPointer() }
+            .onChange(of: motion.quaternion) { feedPointer() }
+            .onChange(of: motion.sampleAge) { feedPointer() }
             .onReceive(NotificationCenter.default.publisher(for: .wiiRouteRequest)) { note in
                 if let requested = note.object as? Route { open(requested) }
+            }
+            .onChange(of: motion.scriptedScenario) {
+                if motion.scriptedScenario != nil, route != .neonRush { open(.neonRush) }
             }
             .onAppear {
                 if route == .lab { motion.showLab(true, notify: false) }
