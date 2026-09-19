@@ -8,3 +8,6 @@ xcuserdata/
 .local/
 server/node_modules/
 Resources/Music/
+.env
+__pycache__/
+*.py[cod]

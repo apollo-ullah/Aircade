@@ -1,6 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+# Local secrets stay in the ignored repository-root .env file. Export them for
+# the Node station without ever copying the Baseten key into app configuration.
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
 mkdir -p .local/mongo
 if ! curl -fsS http://127.0.0.1:8787/api/health >/dev/null 2>&1; then
   if ! lsof -iTCP:27017 -sTCP:LISTEN >/dev/null 2>&1; then

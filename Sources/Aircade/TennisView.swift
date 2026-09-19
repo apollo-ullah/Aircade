@@ -74,18 +74,18 @@ struct TennisView: View {
                         .font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(courtBlue)
                     Text("Tennis").font(.system(size: 52, weight: .bold)).tracking(-2)
                     Text("Keep the rally alive for 60 seconds.").font(.system(size: 19, weight: .medium))
-                    Text("Swing your AirPod or iPhone like a racket. Tilt the face to aim your return; swing faster for a stronger shot.")
+                    Text("Swing your AirPod or iPhone like a racket. Your animated rival tracks the ball and adapts its next return between points.")
                         .font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(4)
                     HStack(spacing: 34) {
                         stat("60", "SECONDS")
                         stat("5", "BALLS")
-                        stat("AUTO", "RETURNER")
+                        stat(game.opponentStatus.fallbackUsed ? "LOCAL" : "AI", "RIVAL")
                     }.padding(.vertical, 8)
                     Divider()
                     VStack(alignment: .leading, spacing: 12) {
                         rule("1", "WATCH", "Track the yellow ball as it clears the net.")
                         rule("2", "SWING", "Meet it near your racket with a deliberate stroke.")
-                        rule("3", "RALLY", "The opponent sends every good shot back automatically.")
+                        rule("3", "RALLY", "Watch the rival move into position and answer your shot.")
                     }
                     MotionButton(id: "start-tennis") {
                         if game.inputReady { game.start(demo: motion.activeInputSimulated) }
@@ -112,9 +112,11 @@ struct TennisView: View {
                     }
                     Spacer()
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("AUTOMATIC OPPONENT").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(courtBlue)
-                        Text("Keep moving: returns vary in position and get faster as your rally grows.")
+                        Text("MODEL OPPONENT").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(courtBlue)
+                        Text("A local policy keeps every rally responsive. When Baseten is configured, it shapes the next return plan.")
                             .font(.callout).foregroundStyle(.secondary)
+                        Text(game.opponentStatus.label).font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(game.opponentStatus.fallbackUsed ? .orange : .green)
                     }.padding(20).frame(width: 300).wiiPanel()
                 }.frame(maxWidth: .infinity, alignment: .trailing)
             }.padding(24)
@@ -155,7 +157,8 @@ struct TennisView: View {
     private var footer: some View {
         HStack {
             Text("Tennis").font(.system(size: 17, weight: .semibold)).italic()
-            Text("AUTOMATIC RETURNER").font(.system(size: 10, weight: .bold)).foregroundStyle(.yellow)
+            Text(game.opponentStatus.label).font(.system(size: 10, weight: .bold))
+                .foregroundStyle(game.opponentStatus.fallbackUsed ? .yellow : .green)
             Spacer(); ActiveControllerBadge(motion: motion, controllers: motion.controllers)
             Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
             MotionButton { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }.buttonStyle(.plain)

@@ -21,16 +21,26 @@ final class SaberScene {
     private let rushRoot = SCNNode()
     private let tennisRoot = SCNNode()
     private let tennisBall = SCNNode()
+    private let tennisOpponent = SCNNode()
+    private let opponentSwingArm = SCNNode()
+    private let opponentBody = SCNNode()
+    private var trackedOpponentFlight: Double?
+    private var trackedBounceFlight: Double?
     private let arcadeEnvironment = SCNNode()
     private var rushNodes: [Int: SCNNode] = [:]
     private var activeSport: AircadeSport = .neonRush
+    private var basePivotPosition = SIMD3<Float>.zero
+    private var tennisPlayerX: Float = 0
+    private static let tennisOpponentZ: Float = -18
+    private static let tennisNetZ: Float = -9
+    private static let tennisCourtHalfWidth: Float = 7.25
     enum ImpactKind { case cut, glance, parry, damage }
 
     init() {
         scene.background.contents = Self.skyTexture()
         let camera = SCNNode()
         camera.camera = SCNCamera()
-        camera.camera?.fieldOfView = 48
+        camera.camera?.fieldOfView = 55
         camera.camera?.wantsHDR = false
         camera.camera?.bloomIntensity = 0.12
         camera.camera?.bloomThreshold = 0.6
@@ -102,6 +112,8 @@ final class SaberScene {
         ball.firstMaterial?.emission.contents = NSColor(calibratedRed: 0.12, green: 0.16, blue: 0.01, alpha: 1)
         tennisBall.geometry = ball
         tennisRoot.addChildNode(tennisBall)
+        buildTennisOpponent()
+        tennisRoot.addChildNode(tennisOpponent)
         buildArcadeEnvironment()
         setSport(.neonRush)
         setLive(false)
@@ -109,9 +121,12 @@ final class SaberScene {
 
     func setOrientation(_ q: simd_quatf) { pivot.simdOrientation = q }
     func setPose(_ pose: SaberPose, trail: Bool) {
-        pivot.simdPosition = pose.position
+        basePivotPosition = pose.position
+        let courtOffset = SIMD3<Float>(activeSport == .tennis ? tennisPlayerX : 0, 0, 0)
+        pivot.simdPosition = pose.position + courtOffset
         pivot.simdOrientation = pose.orientation
-        let tip = pose.point(CombatGeometry.bladeLength)
+        let effectivePose = SaberPose(position: pose.position + courtOffset, orientation: pose.orientation)
+        let tip = effectivePose.point(CombatGeometry.bladeLength)
         if trail, let lastTrail, simd_distance(lastTrail, tip) > 0.03, simd_distance(lastTrail, tip) < 1.3 {
             let line = lineNode(from: lastTrail, to: tip, radius: 0.009, color: .cyan)
             effects.addChildNode(line)
@@ -248,8 +263,101 @@ final class SaberScene {
             tennisEquipment.addChildNode(lineNode(from: center + SIMD3<Float>(-width, offset, 0), to: center + SIMD3<Float>(width, offset, 0), radius: 0.008, color: .white))
         }
     }
+    private func buildTennisOpponent() {
+        func material(_ color: NSColor) -> SCNMaterial {
+            let value = SCNMaterial()
+            value.diffuse.contents = color
+            value.roughness.contents = 0.72
+            return value
+        }
+        func capsule(_ radius: CGFloat, _ height: CGFloat, _ color: NSColor) -> SCNNode {
+            let geometry = SCNCapsule(capRadius: radius, height: height)
+            geometry.firstMaterial = material(color)
+            return SCNNode(geometry: geometry)
+        }
+
+        tennisOpponent.name = "tennis-opponent"
+        tennisOpponent.position = SCNVector3(0, -1.64, Self.tennisOpponentZ)
+        tennisOpponent.scale = SCNVector3(1.28, 1.28, 1.28)
+
+        let shirt = NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.82, alpha: 1)
+        let shorts = NSColor(calibratedWhite: 0.94, alpha: 1)
+        let skin = NSColor(calibratedRed: 0.78, green: 0.58, blue: 0.43, alpha: 1)
+        let hair = NSColor(calibratedRed: 0.16, green: 0.10, blue: 0.07, alpha: 1)
+
+        let torso = capsule(0.34, 1.05, shirt)
+        torso.position = SCNVector3(0, 1.25, 0)
+        torso.scale = SCNVector3(1, 1, 0.72)
+        opponentBody.addChildNode(torso)
+
+        let head = SCNNode(geometry: SCNSphere(radius: 0.43))
+        head.geometry?.firstMaterial = material(skin)
+        head.position = SCNVector3(0, 2.08, 0)
+        head.scale = SCNVector3(0.88, 1.05, 0.9)
+        opponentBody.addChildNode(head)
+
+        let hairCap = SCNNode(geometry: SCNSphere(radius: 0.435))
+        hairCap.geometry?.firstMaterial = material(hair)
+        hairCap.position = SCNVector3(0, 2.2, -0.015)
+        hairCap.scale = SCNVector3(0.9, 0.62, 0.92)
+        opponentBody.addChildNode(hairCap)
+
+        for x: Float in [-0.14, 0.14] {
+            let eye = SCNNode(geometry: SCNSphere(radius: 0.045))
+            eye.geometry?.firstMaterial = material(.black)
+            eye.position = SCNVector3(x, 2.11, 0.37)
+            opponentBody.addChildNode(eye)
+        }
+        let smile = SCNNode(geometry: SCNTorus(ringRadius: 0.10, pipeRadius: 0.018))
+        smile.geometry?.firstMaterial = material(NSColor(calibratedRed: 0.30, green: 0.08, blue: 0.06, alpha: 1))
+        smile.position = SCNVector3(0, 1.94, 0.39)
+        smile.scale = SCNVector3(1, 0.48, 1)
+        opponentBody.addChildNode(smile)
+
+        for x: Float in [-0.2, 0.2] {
+            let leg = capsule(0.13, 0.72, shorts)
+            leg.position = SCNVector3(x, 0.47, 0)
+            opponentBody.addChildNode(leg)
+            let shoe = capsule(0.13, 0.44, .white)
+            shoe.position = SCNVector3(x, 0.12, 0.12)
+            shoe.eulerAngles.x = .pi / 2
+            opponentBody.addChildNode(shoe)
+        }
+
+        let freeArm = capsule(0.11, 0.78, skin)
+        freeArm.position = SCNVector3(-0.47, 1.35, 0)
+        freeArm.eulerAngles.z = -0.42
+        opponentBody.addChildNode(freeArm)
+
+        opponentSwingArm.position = SCNVector3(0.42, 1.57, 0)
+        let arm = capsule(0.115, 0.86, skin)
+        arm.position = SCNVector3(0, -0.37, 0)
+        opponentSwingArm.addChildNode(arm)
+
+        let racket = SCNNode()
+        let handle = SCNCylinder(radius: 0.055, height: 0.55)
+        handle.firstMaterial = material(NSColor(calibratedWhite: 0.18, alpha: 1))
+        let handleNode = SCNNode(geometry: handle)
+        handleNode.position = SCNVector3(0, -0.95, 0)
+        racket.addChildNode(handleNode)
+        let frame = SCNTorus(ringRadius: 0.34, pipeRadius: 0.04)
+        frame.firstMaterial = material(NSColor(calibratedRed: 0.91, green: 0.76, blue: 0.12, alpha: 1))
+        let frameNode = SCNNode(geometry: frame)
+        frameNode.position = SCNVector3(0, -1.47, 0)
+        frameNode.eulerAngles.x = .pi / 2
+        frameNode.scale = SCNVector3(0.76, 1, 1.08)
+        racket.addChildNode(frameNode)
+        for offset in stride(from: -0.22 as Float, through: 0.22, by: 0.11) {
+            racket.addChildNode(lineNode(from: SIMD3<Float>(offset, -1.78, 0), to: SIMD3<Float>(offset, -1.16, 0), radius: 0.006, color: .white))
+        }
+        opponentSwingArm.addChildNode(racket)
+        opponentSwingArm.eulerAngles = SCNVector3(0.18, 0, -2.0)
+        opponentBody.addChildNode(opponentSwingArm)
+        tennisOpponent.addChildNode(opponentBody)
+    }
     func setSport(_ sport: AircadeSport) {
         activeSport = sport
+        pivot.simdPosition = basePivotPosition + SIMD3<Float>(sport == .tennis ? tennisPlayerX : 0, 0, 0)
         saberEquipment.isHidden = sport != .neonRush
         tennisEquipment.isHidden = sport != .tennis
         rushRoot.isHidden = sport != .neonRush
@@ -318,34 +426,41 @@ final class SaberScene {
             arcadeEnvironment.addChildNode(node)
         }
         let turf = Self.turfTexture()
-        for i in 0..<8 {
-            let surface = SCNBox(width: 8, height: 0.012, length: 4, chamferRadius: 0)
+        let courtHalfWidth = Self.tennisCourtHalfWidth
+        let courtWidth = CGFloat(courtHalfWidth * 2)
+        for i in 0..<11 {
+            let surface = SCNBox(width: courtWidth, height: 0.012, length: 4, chamferRadius: 0)
             surface.firstMaterial?.diffuse.contents = turf
             surface.firstMaterial?.multiply.contents = NSColor(calibratedWhite: i % 2 == 0 ? 1 : 0.90, alpha: 1)
             let node = SCNNode(geometry: surface)
             node.position = SCNVector3(0, -1.63, -Float(i) * 4)
             arcadeEnvironment.addChildNode(node)
         }
-        for x: Float in [-4, 4] {
-            box(0.045, 0.018, 30, SCNVector3(x, -1.6, -12), .white)
-            box(0.12, 0.6, 31, SCNVector3(x * 1.22, -1.35, -12), NSColor(calibratedRed: 0.13, green: 0.38, blue: 0.29, alpha: 1))
+        for x: Float in [-courtHalfWidth, courtHalfWidth] {
+            box(0.045, 0.018, 42, SCNVector3(x, -1.6, -18), .white)
+            box(0.12, 0.6, 43, SCNVector3(x * 1.18, -1.35, -18), NSColor(calibratedRed: 0.13, green: 0.38, blue: 0.29, alpha: 1))
         }
-        for z: Float in [1.5, -12, -26] { box(8, 0.018, 0.045, SCNVector3(0, -1.6, z), .white) }
+        // Inner singles lines emphasize the extra doubles-court width.
+        for x: Float in [-5.45, 5.45] {
+            box(0.035, 0.016, 21, SCNVector3(x, -1.59, -9), NSColor.white.withAlphaComponent(0.88))
+        }
+        for z: Float in [1.5, -4.5, -13.5, -19.5, -39] { box(courtWidth, 0.018, 0.045, SCNVector3(0, -1.6, z), .white) }
+        box(0.035, 0.016, 9, SCNVector3(0, -1.59, -9), NSColor.white.withAlphaComponent(0.88))
         // Centre net shared by the tennis game and stadium backdrop.
-        box(0.09, 1.65, 0.09, SCNVector3(-4.15, -0.82, -5.4), .white)
-        box(0.09, 1.65, 0.09, SCNVector3(4.15, -0.82, -5.4), .white)
-        box(8.3, 0.055, 0.055, SCNVector3(0, -0.15, -5.4), .white)
-        for x in stride(from: -4.0 as Float, through: 4.0, by: 0.28) {
-            box(0.012, 1.25, 0.012, SCNVector3(x, -0.78, -5.4), NSColor.white.withAlphaComponent(0.7))
+        box(0.09, 1.65, 0.09, SCNVector3(-courtHalfWidth - 0.15, -0.82, Self.tennisNetZ), .white)
+        box(0.09, 1.65, 0.09, SCNVector3(courtHalfWidth + 0.15, -0.82, Self.tennisNetZ), .white)
+        box(courtWidth + 0.3, 0.055, 0.055, SCNVector3(0, -0.15, Self.tennisNetZ), .white)
+        for x in stride(from: -courtHalfWidth, through: courtHalfWidth, by: 0.28) {
+            box(0.012, 1.25, 0.012, SCNVector3(x, -0.78, Self.tennisNetZ), NSColor.white.withAlphaComponent(0.7))
         }
         for y in stride(from: -1.38 as Float, through: -0.26, by: 0.18) {
-            box(8.05, 0.012, 0.012, SCNVector3(0, y, -5.4), NSColor.white.withAlphaComponent(0.7))
+            box(courtWidth + 0.05, 0.012, 0.012, SCNVector3(0, y, Self.tennisNetZ), NSColor.white.withAlphaComponent(0.7))
         }
         for side: Float in [-1, 1] {
             for row in 0..<3 {
-                box(1.1, 0.3, 29, SCNVector3(side * (6 + Float(row) * 1.1), -1.35 + Float(row) * 0.38, -13), NSColor(calibratedRed: 0.69, green: 0.74, blue: 0.69, alpha: 1))
-                for seat in 0..<22 {
-                    let x = side * (6 + Float(row) * 1.1)
+                box(1.1, 0.3, 41, SCNVector3(side * (9.4 + Float(row) * 1.1), -1.35 + Float(row) * 0.38, -19), NSColor(calibratedRed: 0.69, green: 0.74, blue: 0.69, alpha: 1))
+                for seat in 0..<31 {
+                    let x = side * (9.4 + Float(row) * 1.1)
                     let y = -1.05 + Float(row) * 0.38
                     let z = -Float(seat) * 1.25
                     let shirt = NSColor(calibratedHue: CGFloat((seat * 7 + row * 3) % 20) / 20, saturation: 0.48, brightness: 0.80, alpha: 1)
@@ -356,7 +471,7 @@ final class SaberScene {
                     arcadeEnvironment.addChildNode(head)
                 }
             }
-            for i in 0..<15 {
+            for i in 0..<18 {
                 let z = -Float(i) * 3.7 + 1
                 let x = side * (12 + Float(i % 3))
                 let height = CGFloat(2.5 + Double(i % 4) * 0.4)
@@ -375,13 +490,13 @@ final class SaberScene {
                 }
             }
         }
-        box(22, 1.7, 0.35, SCNVector3(0, -0.8, -30), NSColor(calibratedRed: 0.12, green: 0.43, blue: 0.33, alpha: 1))
+        box(22, 1.7, 0.35, SCNVector3(0, -0.8, -42), NSColor(calibratedRed: 0.12, green: 0.43, blue: 0.33, alpha: 1))
         let sign = SCNText(string: "Aircade Sports", extrusionDepth: 0.005)
         sign.font = .systemFont(ofSize: 0.65, weight: .medium)
         sign.firstMaterial?.diffuse.contents = NSColor.white
         let node = SCNNode(geometry: sign)
         let bounds = node.boundingBox
-        node.position = SCNVector3(-(bounds.max.x + bounds.min.x) / 2, -0.85, -29.8)
+        node.position = SCNVector3(-(bounds.max.x + bounds.min.x) / 2, -0.85, -41.8)
         arcadeEnvironment.addChildNode(node)
     }
     func clearRush() {
@@ -391,14 +506,96 @@ final class SaberScene {
         lastTrail = nil
     }
     func clearTennis() {
+        setTennisPlayerX(0)
         tennisBall.isHidden = true
+        tennisOpponent.removeAllActions()
+        opponentBody.removeAllActions()
+        opponentSwingArm.removeAllActions()
+        tennisOpponent.position = SCNVector3(0, -1.64, Self.tennisOpponentZ)
+        opponentSwingArm.eulerAngles = SCNVector3(0.18, 0, -2.0)
+        trackedOpponentFlight = nil
+        trackedBounceFlight = nil
         effects.childNodes.forEach { $0.removeFromParentNode() }
         lastTrail = nil
+    }
+    func setTennisPlayerX(_ x: Float) {
+        tennisPlayerX = x
+        if activeSport == .tennis {
+            pivot.simdPosition = basePivotPosition + SIMD3<Float>(x, 0, 0)
+        }
     }
     func syncTennis(ball: TennisBallFlight?, elapsed: Double) {
         guard let ball else { tennisBall.isHidden = true; return }
         tennisBall.isHidden = false
         tennisBall.simdPosition = ball.position(at: elapsed)
+        if let bounce = ball.bounce, let bounceTime = ball.bounceTime,
+           elapsed >= bounceTime, trackedBounceFlight != ball.born {
+            trackedBounceFlight = ball.born
+            showTennisBounce(at: bounce)
+        }
+        if ball.direction == .towardOpponent, trackedOpponentFlight != ball.born {
+            trackedOpponentFlight = ball.born
+            let movementTime = max(0.12, ball.duration * 0.72)
+            let contactX = ball.defenderContactX ?? ball.to.x
+            let anticipatedStroke: TennisStroke = ball.to.x >= contactX ? .forehand : .backhand
+            let bodyX = opponentBodyX(contactX: contactX, stroke: anticipatedStroke)
+            tennisOpponent.removeAction(forKey: "track-ball")
+            tennisOpponent.runAction(.move(to: SCNVector3(bodyX, -1.64, Self.tennisOpponentZ), duration: movementTime), forKey: "track-ball")
+            let lean: CGFloat = CGFloat(ball.to.x) < tennisOpponent.position.x ? 0.10 : -0.10
+            opponentBody.runAction(.sequence([.rotateTo(x: 0, y: 0, z: lean, duration: 0.12),
+                                               .rotateTo(x: 0, y: 0, z: 0, duration: movementTime)]))
+        }
+    }
+    func prepareTennisOpponent(contactX: Float, stroke: TennisStroke, delay: Double) {
+        tennisOpponent.removeAction(forKey: "track-ball")
+        tennisOpponent.runAction(.move(to: SCNVector3(opponentBodyX(contactX: contactX, stroke: stroke), -1.64, Self.tennisOpponentZ), duration: min(0.16, delay)), forKey: "prepare")
+        opponentSwingArm.removeAllActions()
+        let readyZ: CGFloat = stroke == .forehand ? -2.42 : 2.15
+        let readyY: CGFloat = stroke == .forehand ? -0.3 : 0.35
+        opponentSwingArm.runAction(.rotateTo(x: 0.12, y: readyY, z: readyZ, duration: max(0.12, delay * 0.72)))
+    }
+    func tennisOpponentHit(contactX: Float, stroke: TennisStroke) {
+        tennisOpponent.position.x = CGFloat(opponentBodyX(contactX: contactX, stroke: stroke))
+        opponentSwingArm.removeAllActions()
+        let contactZ: CGFloat = stroke == .forehand ? -1.65 : 1.65
+        let followZ: CGFloat = stroke == .forehand ? -0.35 : 0.35
+        let followY: CGFloat = stroke == .forehand ? 0.5 : -0.5
+        opponentSwingArm.eulerAngles = SCNVector3(-0.08, followY, contactZ)
+        opponentSwingArm.runAction(.sequence([
+            .rotateTo(x: -0.08, y: followY, z: followZ, duration: 0.14),
+            .wait(duration: 0.08),
+            .rotateTo(x: 0.18, y: 0, z: -2.0, duration: 0.24)
+        ]), forKey: "swing")
+        tennisImpact(at: SIMD3<Float>(contactX, 0.05, Self.tennisOpponentZ), velocity: .zero)
+    }
+    func tennisOpponentMiss(ballX: Float, attemptedX: Float) {
+        let stroke: TennisStroke = ballX >= attemptedX ? .forehand : .backhand
+        tennisOpponent.position.x = CGFloat(opponentBodyX(contactX: attemptedX, stroke: stroke))
+        opponentSwingArm.removeAllActions()
+        let direction: CGFloat = stroke == .forehand ? -1 : 1
+        opponentSwingArm.runAction(.sequence([
+            .rotateTo(x: -0.15, y: direction * 0.7, z: direction * 0.55, duration: 0.12),
+            .rotateTo(x: 0.18, y: 0, z: -2.0, duration: 0.28)
+        ]), forKey: "miss-swing")
+        let miss = SCNNode(geometry: SCNTorus(ringRadius: 0.22, pipeRadius: 0.035))
+        miss.geometry?.firstMaterial?.emission.contents = NSColor.systemOrange
+        miss.eulerAngles.x = .pi / 2
+        miss.simdPosition = SIMD3<Float>(ballX, 0.05, Self.tennisOpponentZ)
+        effects.addChildNode(miss)
+        miss.runAction(.sequence([.group([.scale(to: 2.5, duration: 0.32), .fadeOut(duration: 0.32)]), .removeFromParentNode()]))
+    }
+    private func showTennisBounce(at point: SIMD3<Float>) {
+        let ring = SCNNode(geometry: SCNTorus(ringRadius: 0.15, pipeRadius: 0.018))
+        ring.geometry?.firstMaterial?.emission.contents = NSColor(calibratedRed: 0.78, green: 0.9, blue: 0.12, alpha: 1)
+        ring.eulerAngles.x = .pi / 2
+        ring.simdPosition = point + SIMD3<Float>(0, 0.015, 0)
+        effects.addChildNode(ring)
+        ring.runAction(.sequence([.group([.scale(to: 3.2, duration: 0.28), .fadeOut(duration: 0.28)]), .removeFromParentNode()]))
+    }
+    private func opponentBodyX(contactX: Float, stroke: TennisStroke) -> Float {
+        // At the contact pose the racket centre is offset from the character's
+        // root. Moving the body by the inverse offset keeps racket and ball aligned.
+        contactX + (stroke == .forehand ? 1.12 : -2.02)
     }
     func tennisImpact(at point: SIMD3<Float>, velocity: SIMD3<Float>) {
         impact(at: point, kind: .parry, velocity: velocity)

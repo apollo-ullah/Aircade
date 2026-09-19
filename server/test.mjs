@@ -3,13 +3,26 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { MongoClient } from 'mongodb';
 
+async function availablePort() {
+  const probe = createServer();
+  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
+  const port = probe.address().port;
+  await new Promise(resolve => probe.close(resolve));
+  return port;
+}
+
 test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards', async () => {
   const database = `aircade_test_${randomUUID().replaceAll('-', '')}`;
-  const child = spawn(process.execPath, ['server.mjs'], { cwd: import.meta.dirname, env: { ...process.env, PORT: '8788', MONGODB_DB: database }, stdio: 'pipe' });
+  const child = spawn(process.execPath, ['server.mjs'], {
+    cwd: import.meta.dirname,
+    env: { ...process.env, PORT: '8788', MONGODB_DB: database, BASETEN_TENNIS_LLM_URL: '', BASETEN_TENNIS_URL: '', BASETEN_API_KEY: '' },
+    stdio: 'pipe'
+  });
   let output = ''; child.stdout.on('data', d => output += d); child.stderr.on('data', d => output += d);
   const mongo = new MongoClient(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017');
   try {
@@ -26,6 +39,21 @@ test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards'
       return { status: r.status, body: await r.json() };
     }
     const digest = createHash('sha256').update('test-badge-only-not-a-real-attendee').digest('hex');
+    const candidates = [
+      { id: 'deep-left', targetX: -0.92, flightDuration: 1.22, delay: 0.34, stroke: 'forehand', distance: 0.92, reactionTime: 1.22, pace: 0.82, targetsWeakSide: true, rallyLength: 4 },
+      { id: 'center-fast', targetX: 0.02, flightDuration: 1.08, delay: 0.31, stroke: 'forehand', distance: 0.02, reactionTime: 1.08, pace: 0.93, targetsWeakSide: false, rallyLength: 4 },
+      { id: 'deep-right', targetX: 0.94, flightDuration: 1.2, delay: 0.35, stroke: 'backhand', distance: 0.94, reactionTime: 1.2, pace: 0.83, targetsWeakSide: false, rallyLength: 4 }
+    ];
+    assert.equal((await request('/api/tennis/opponent-plan', 'POST', { difficulty: 'rival', score: 0, misses: 0, longestRally: 0, candidates }, false)).status, 401);
+    assert.equal((await request('/api/tennis/opponent-plan', 'POST', { difficulty: 'rival', score: 0, misses: 0, longestRally: 0, candidates: [] })).status, 400);
+    const opponentPlan = (await request('/api/tennis/opponent-plan', 'POST', { difficulty: 'rival', score: 400, misses: 1, longestRally: 4, candidates })).body;
+    assert.equal(opponentPlan.fallbackUsed, true);
+    assert.equal(opponentPlan.modelVersion, 'synthetic-logreg-v1');
+    assert.deepEqual(new Set(opponentPlan.returns.map(value => value.candidateID)), new Set(candidates.map(value => value.id)));
+    for (let i = 1; i < opponentPlan.returns.length; i++) {
+      const side = value => value.targetX < -0.2 ? 'left' : value.targetX > 0.2 ? 'right' : 'center';
+      assert.notEqual(side(opponentPlan.returns[i - 1]), side(opponentPlan.returns[i]));
+    }
     assert.equal((await request('/api/sign-in', 'POST', { badgeDigest: digest }, false)).status, 401);
     const a = (await request('/api/sign-in', 'POST', { badgeDigest: digest })).body;
     assert.equal(a.isPublic, false);
@@ -101,5 +129,74 @@ test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards'
     child.kill('SIGTERM');
     await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));
     await mongo.connect(); await mongo.db(database).dropDatabase(); await mongo.close();
+  }
+});
+
+test('Baseten LLM ranks only legal returns and reports remote inference', async () => {
+  const stationPort = await availablePort();
+  let received;
+  const mock = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    received = { url: req.url, authorization: req.headers.authorization, body: JSON.parse(Buffer.concat(chunks)) };
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      model: 'qwen-3-4b-test',
+      choices: [{ message: { content: JSON.stringify({ rankedCandidateIds: ['deep-right', 'deep-left', 'middle', 'left', 'right'] }) } }]
+    }));
+  });
+  await new Promise(resolve => mock.listen(0, '127.0.0.1', resolve));
+  const modelPort = mock.address().port;
+  const database = `aircade_llm_test_${randomUUID().replaceAll('-', '')}`;
+  const child = spawn(process.execPath, ['server.mjs'], {
+    cwd: import.meta.dirname,
+    env: {
+      ...process.env, PORT: String(stationPort), MONGODB_DB: database,
+      BASETEN_TENNIS_LLM_URL: `http://127.0.0.1:${modelPort}/v1`,
+      BASETEN_TENNIS_LLM_MODEL: 'qwen-3-4b-test', BASETEN_API_KEY: 'test-key', BASETEN_TENNIS_URL: ''
+    },
+    stdio: 'pipe'
+  });
+  let output = ''; child.stdout.on('data', data => output += data); child.stderr.on('data', data => output += data);
+  const mongo = new MongoClient(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017');
+  try {
+    let ready = false;
+    for (let i = 0; i < 100; i++) {
+      if (child.exitCode !== null) throw new Error(output);
+      try { if ((await fetch(`http://127.0.0.1:${stationPort}/api/health`)).ok) { ready = true; break; } } catch {}
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.ok(ready, output);
+    const config = JSON.parse(readFileSync(new URL('../.local/station.json', import.meta.url)));
+    const candidates = [
+      { id: 'deep-left', targetX: -3.1, flightDuration: 2.72, delay: 0.34, stroke: 'forehand', distance: 3.1, reactionTime: 2.72, pace: 0.37, targetsWeakSide: true, rallyLength: 4 },
+      { id: 'left', targetX: -1.55, flightDuration: 2.88, delay: 0.38, stroke: 'backhand', distance: 1.55, reactionTime: 2.88, pace: 0.35, targetsWeakSide: true, rallyLength: 4 },
+      { id: 'middle', targetX: 0, flightDuration: 2.42, delay: 0.31, stroke: 'forehand', distance: 0, reactionTime: 2.42, pace: 0.41, targetsWeakSide: false, rallyLength: 4 },
+      { id: 'right', targetX: 1.55, flightDuration: 2.86, delay: 0.39, stroke: 'forehand', distance: 1.55, reactionTime: 2.86, pace: 0.35, targetsWeakSide: false, rallyLength: 4 },
+      { id: 'deep-right', targetX: 3.1, flightDuration: 2.68, delay: 0.35, stroke: 'backhand', distance: 3.1, reactionTime: 2.68, pace: 0.37, targetsWeakSide: false, rallyLength: 4 }
+    ];
+    const response = await fetch(`http://127.0.0.1:${stationPort}/api/tennis/opponent-plan`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ difficulty: 'rival', score: 400, misses: 1, longestRally: 4, previousReturnX: 3.1, candidates })
+    });
+    assert.equal(response.status, 200);
+    const plan = await response.json();
+    assert.equal(plan.provider, 'Baseten Model API');
+    assert.equal(plan.modelVersion, 'qwen-3-4b-test');
+    assert.equal(plan.fallbackUsed, false);
+    assert.equal(plan.returns[0].candidateID, 'deep-left');
+    assert.deepEqual(new Set(plan.returns.map(value => value.candidateID)), new Set(candidates.map(value => value.id)));
+    assert.equal(received.url, '/v1/chat/completions');
+    assert.equal(received.authorization, 'Bearer test-key');
+    assert.equal(received.body.max_tokens, 96);
+    assert.equal(received.body.reasoning_effort, 'low');
+    assert.match(received.body.messages[0].content, /every candidate ID exactly once/);
+    assert.match(received.body.messages[1].content, /"previousReturnX":3\.1/);
+  } finally {
+    child.kill('SIGTERM');
+    await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));
+    await mongo.connect(); await mongo.db(database).dropDatabase(); await mongo.close();
+    await new Promise(resolve => mock.close(resolve));
   }
 });

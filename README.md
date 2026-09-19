@@ -11,7 +11,13 @@ After the initial connection/grip setup, use the AirPod to navigate the main men
 
 A normal launch reconnects AirPods automatically when a saved left/right grip exists. First-time pairing, OS permission prompts, calibration and text-entry sheets still use the mouse/keyboard. Menu pointing uses the chosen controller (**air → Settings**), with a ready alternate device as fallback if the selected one is unavailable. Deliberate mouse movement temporarily takes over. **Space** selects the pointed-to button at home and pauses/resumes a game; **R** recenters the appropriate controller. **Escape / Back to menu** leaves a channel.
 
-Tennis is a 60-second arcade rally against an automatic returner. Actual racket-face contact, face direction, and swing speed affect returns. The current opponent is deterministic logic, not a trained AI service. Avatars, more than one phone, and external haptic motors are deferred.
+Tennis is a 60-second arcade rally against an animated, model-backed rival. Actual racket-face contact, face direction, and swing speed affect returns. The rival moves to the ball, prepares forehand/backhand shots, can miss wide winners, and asks the local station for a validated return plan without blocking gameplay. Avatars, more than one phone, and external haptic motors are deferred.
+
+## Tennis model opponent
+
+Swift owns animation and physics, including court bounces and opponent reach. Between points, the app asks the local station API for a candidate-return plan and always retains a validated local fallback.
+
+To use the Baseten policy, put `BASETEN_API_KEY=...` in the ignored repository-root `.env` file before running `./scripts/start-station.sh`. The default station configuration calls `zai-org/GLM-5.3-Flash` through Baseten's OpenAI-compatible endpoint. You can override `BASETEN_TENNIS_LLM_MODEL` or `BASETEN_TENNIS_LLM_URL`. A small Truss baseline and deterministic synthetic trainer are also available under `baseten/tennis-opponent`; see its README for deployment details.
 
 ## Audio output
 

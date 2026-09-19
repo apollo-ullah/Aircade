@@ -181,6 +181,17 @@ Five new tests cover speaker selection despite an AirPods system default, no fal
 The final full Swift suite passes **174 tests** (79 MotionCore, 3 ControllerLink, 92 app-model); log: `/tmp/aircade-audio-full-tests.log`.
 
 
+## Animated model tennis opponent — September 19
+
+Integrated teammate commit `ebcb531` onto the current arcade branch without replacing the newer Wii shell, controller recovery, swept racket-face collision, demo/guest score provenance, menu navigation, or Mac-speaker routing. Tennis now renders a far-court character with tracking, preparation, forehand/backhand and miss animations; the court and ball support two-leg bounce trajectories. Player shots can beat the rival's finite movement and racket reach for a 300-point winner.
+
+The app requests return plans asynchronously from the authenticated local station and keeps rendering with a bounded local fallback. The station supports Baseten's OpenAI-compatible Model API, validates a complete ranking of supplied candidate IDs, rejects invented/invalid plans, and can also use the included Truss logistic model. Secrets load only from ignored `.env` state. No Baseten key is present on this machine, so the current live build reports the checked-in local policy until one is configured.
+
+The combined suite passes **181 Swift tests** (82 MotionCore, 3 ControllerLink, 96 app-model); log: `/tmp/aircade-opponent-full-tests.log`. The station passes its full Mongo/profile/leaderboard suite and a mocked Baseten request/response check, including authorization, candidate validation and fallback behavior; log: `/tmp/aircade-opponent-server-tests.log`. Release build and strict bundle signature verification pass.
+
+The native Tennis smoke completed 60 seconds with 11 controller-pose returns, zero misses, 3,740 points, results state and zero queued scores. Its SceneKit capture visibly contains the animated opponent, expanded court, net, racket and ball. Evidence: `build/opponent-tennis-smoke/tennis-smoke-result.json`, `tennis-play-scene.png` and the menu/play/results UI captures. This is deterministic synthetic input; physical opponent play and live Baseten inference remain separate acceptance checks.
+
+
 ## AirPod menu navigation — September 19
 
 The cursor uses the calibrated upright blade axis from gameplay: left/right lean moves horizontally; tipping toward the screen moves down and tipping away moves up. A shared native-button target registry replaces home-only flick selection with a one-second visible dwell ring across channels, game setup, pause/results actions, settings and the bottom navigation bar. Disabled targets, stale motion, mouse override, background windows and sheets cancel selection; active gameplay disables the menu pointer. New menus require movement before accepting a hold. Normal launches reconnect an existing saved AirPod grip. The working grip-calibration algorithm is unchanged. Initial pairing, permissions, calibration and text-entry sheets still require mouse/keyboard.

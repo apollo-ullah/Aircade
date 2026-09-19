@@ -21,6 +21,7 @@ final class TennisGame: ObservableObject {
     @Published var sound = true
     @Published private(set) var isDemo = false
     @Published private(set) var recoveringInput = false
+    @Published private(set) var opponentStatus = TennisOpponentStatus()
 
     var authorizeRun: (() -> Bool)?
     private(set) var runID: String?
@@ -30,9 +31,11 @@ final class TennisGame: ObservableObject {
     var onRunAbandoned: ((String?) -> Void)?
     var onJudgment: ((TennisEvent) -> Void)?
     var pollInput: (() -> Void)?
+    var activePlayerID: (() -> String?)?
 
     private let scene: SaberScene
     private let opponent: any TennisOpponentStrategy
+    private let modelOpponent: BasetenTennisOpponent?
     private let clock: () -> Double
     private let scoreDefaults: UserDefaults
     private var timer: Timer?
@@ -45,14 +48,16 @@ final class TennisGame: ObservableObject {
     private var resultSaved = false
     private var recoveryStartedAt = 0.0
 
-    init(scene: SaberScene, opponent: any TennisOpponentStrategy = AutomaticReboundOpponent(), automaticTimer: Bool = true,
+    init(scene: SaberScene, opponent: any TennisOpponentStrategy = BasetenTennisOpponent(), automaticTimer: Bool = true,
          clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }, scoreDefaults: UserDefaults = .standard) {
         self.scene = scene
         self.opponent = opponent
+        self.modelOpponent = opponent as? BasetenTennisOpponent
         self.clock = clock
         self.scoreDefaults = scoreDefaults
         self.lastTick = clock()
         self.bestScore = scoreDefaults.integer(forKey: "tennis.best")
+        self.modelOpponent?.onStatus = { [weak self] status in self?.opponentStatus = status }
         if automaticTimer {
             let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.tick() }
             RunLoop.main.add(timer, forMode: .common)
@@ -80,6 +85,7 @@ final class TennisGame: ObservableObject {
         recoveringInput = false
         lastTick = now
         scene.clearTennis()
+        modelOpponent?.refresh(playerID: activePlayerID?(), match: state)
     }
 
     func pause(_ reason: String = "Take a breath.") {
@@ -196,21 +202,32 @@ final class TennisGame: ObservableObject {
         onJudgment?(event)
         feedbackUntil = now + 0.9
         switch event {
-        case .opponentReturn:
+        case .opponentPreparing(let contactX, let stroke, let delay):
+            scene.prepareTennisOpponent(contactX: contactX, stroke: stroke, delay: delay)
+        case .opponentReturn(let contactX, let stroke):
             feedbackGood = true
             feedbackPoints = 0
             feedback = state.rally == 0 ? "SERVE" : "RETURNING"
+            scene.tennisOpponentHit(contactX: contactX, stroke: stroke)
         case .playerReturn(let points):
             feedbackGood = true
             feedbackPoints = points
             feedback = state.rally >= 8 ? "HOT RALLY" : state.rally >= 4 ? "NICE RETURN" : "GOOD SHOT"
             scene.tennisImpact(at: point, velocity: velocity)
             if sound { GameAudio.shared.play("Pop") }
+            modelOpponent?.refresh(playerID: activePlayerID?(), match: state)
+        case .opponentMiss(let ballX, let attemptedX, let points):
+            feedbackGood = true
+            feedbackPoints = points
+            feedback = "WINNER"
+            scene.tennisOpponentMiss(ballX: ballX, attemptedX: attemptedX)
+            if sound { GameAudio.shared.play("Pop") }
         case .miss:
             feedbackGood = false
             feedbackPoints = 0
             feedback = "OUT OF REACH"
             if sound { GameAudio.shared.play("Tink") }
+            modelOpponent?.refresh(playerID: activePlayerID?(), match: state)
         case .finished:
             break
         }

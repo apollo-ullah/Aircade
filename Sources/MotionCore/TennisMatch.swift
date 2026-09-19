@@ -3,6 +3,7 @@ import simd
 
 public enum TennisPhase: String, Equatable { case menu, countdown, playing, paused, results }
 public enum TennisBallDirection: Equatable { case towardPlayer, towardOpponent }
+public enum TennisStroke: String, Equatable { case forehand, backhand }
 
 public struct TennisBallFlight {
     public let id: Int
@@ -12,18 +13,34 @@ public struct TennisBallFlight {
     public let to: SIMD3<Float>
     public let arcHeight: Float
     public let direction: TennisBallDirection
+    public let bounce: SIMD3<Float>?
+    public let bounceProgress: Float
+    public let defenderContactX: Float?
     public var arrival: Double { born + duration }
+    public var bounceTime: Double? { bounce.map { _ in born + duration * Double(bounceProgress) } }
 
     public init(id: Int = 0, born: Double, duration: Double, from: SIMD3<Float>, to: SIMD3<Float>,
-                arcHeight: Float, direction: TennisBallDirection) {
+                arcHeight: Float, direction: TennisBallDirection, bounce: SIMD3<Float>? = nil,
+                bounceProgress: Float = 0.5, defenderContactX: Float? = nil) {
         self.id = id; self.born = born; self.duration = duration
         self.from = from; self.to = to; self.arcHeight = arcHeight; self.direction = direction
+        self.bounce = bounce; self.bounceProgress = bounceProgress; self.defenderContactX = defenderContactX
     }
 
     public func position(at time: Double) -> SIMD3<Float> {
         let progress = Float(min(1, max(0, (time - born) / duration)))
-        let linear = simd_mix(from, to, SIMD3<Float>(repeating: progress))
-        return linear + SIMD3<Float>(0, sin(progress * .pi) * arcHeight, 0)
+        guard let bounce else {
+            let linear = simd_mix(from, to, SIMD3<Float>(repeating: progress))
+            return linear + SIMD3<Float>(0, sin(progress * .pi) * arcHeight, 0)
+        }
+        if progress <= bounceProgress {
+            let leg = progress / bounceProgress
+            let linear = simd_mix(from, bounce, SIMD3<Float>(repeating: leg))
+            return linear + SIMD3<Float>(0, sin(leg * .pi) * arcHeight, 0)
+        }
+        let leg = (progress - bounceProgress) / (1 - bounceProgress)
+        let linear = simd_mix(bounce, to, SIMD3<Float>(repeating: leg))
+        return linear + SIMD3<Float>(0, sin(leg * .pi) * arcHeight * 0.62, 0)
     }
 }
 
@@ -31,19 +48,23 @@ public struct TennisOpponentReturn {
     public let targetX: Float
     public let flightDuration: Double
     public let delay: Double
-    public init(targetX: Float, flightDuration: Double, delay: Double) {
+    public let stroke: TennisStroke
+    public init(targetX: Float, flightDuration: Double, delay: Double, stroke: TennisStroke = .forehand) {
         self.targetX = targetX
         self.flightDuration = flightDuration
         self.delay = delay
+        self.stroke = stroke
     }
 
     /// Strategy output is a suggestion, never permission to put NaN or an
     /// impossible flight into the deterministic match.
     public func validated(fallback: TennisOpponentReturn) -> TennisOpponentReturn {
         guard targetX.isFinite, flightDuration.isFinite, delay.isFinite else { return fallback }
+        // AirPods provide rotation but no lateral translation. Keep shots that
+        // come toward the player inside the fixed racket's reachable lane.
         return TennisOpponentReturn(targetX: min(0.9, max(-0.9, targetX)),
-                                    flightDuration: min(3, max(1.05, flightDuration)),
-                                    delay: min(2, max(0.15, delay)))
+                                    flightDuration: min(4, max(0.85, flightDuration)),
+                                    delay: min(0.8, max(0.18, delay)), stroke: stroke)
     }
 }
 
@@ -59,14 +80,17 @@ public struct AutomaticReboundOpponent: TennisOpponentStrategy {
         let lanes: [Float] = [0, -0.72, 0.62, -0.36, 0.82, 0.28]
         let lane = lanes[sequence % lanes.count]
         return TennisOpponentReturn(targetX: lane,
-                                    flightDuration: max(1.05, 1.55 - Double(min(rally, 10)) * 0.035),
-                                    delay: 0.42)
+                                    flightDuration: max(2.35, 2.9 - Double(min(rally, 10)) * 0.04),
+                                    delay: 0.42,
+                                    stroke: sequence.isMultiple(of: 2) ? .forehand : .backhand)
     }
 }
 
 public enum TennisEvent {
-    case opponentReturn
+    case opponentPreparing(contactX: Float, stroke: TennisStroke, delay: Double)
+    case opponentReturn(contactX: Float, stroke: TennisStroke)
     case playerReturn(points: Int)
+    case opponentMiss(ballX: Float, attemptedX: Float, points: Int)
     case miss
     case finished
 }
@@ -86,10 +110,12 @@ public struct TennisMatch {
     public private(set) var rally = 0
     public private(set) var longestRally = 0
     public private(set) var misses = 0
+    public private(set) var opponentMisses = 0
     public private(set) var completed = false
     public private(set) var ball: TennisBallFlight?
     private var nextOpponentReturn: Double?
     private var pendingPlan: TennisOpponentReturn?
+    private var opponentContactX: Float = 0
     private var sequence = 0
 
     public var remaining: Double { max(0, Self.duration - elapsed) }
@@ -98,7 +124,7 @@ public struct TennisMatch {
     }
     public var rank: String {
         if !completed { return "KEEP SWINGING" }
-        if longestRally >= 12 && accuracy >= 90 { return "S" }
+        if longestRally >= 10 && accuracy >= 90 { return "S" }
         if longestRally >= 8 && accuracy >= 80 { return "A" }
         if longestRally >= 4 { return "B" }
         return "C"
@@ -150,9 +176,29 @@ public struct TennisMatch {
                 scheduleOpponentReturn(after: 0.9)
             } else {
                 ball = nil
+                let attemptedX = flight.defenderContactX ?? flight.to.x
+                if abs(attemptedX - flight.to.x) > 0.04 {
+                    opponentContactX = attemptedX
+                    opponentMisses += 1
+                    rally = 0
+                    let points = 300
+                    score += points
+                    events.append(.opponentMiss(ballX: flight.to.x, attemptedX: attemptedX, points: points))
+                    scheduleOpponentReturn(after: 0.9)
+                    if elapsed >= Self.duration {
+                        completed = true; phase = .results; nextOpponentReturn = nil; pendingPlan = nil
+                        events.append(.finished)
+                    }
+                    return events
+                }
+                opponentContactX = flight.to.x
                 let plan = validatedPlan(opponent)
-                pendingPlan = plan
-                nextOpponentReturn = elapsed + plan.delay
+                let prepared = TennisOpponentReturn(targetX: plan.targetX, flightDuration: plan.flightDuration,
+                                                    delay: plan.delay,
+                                                    stroke: opponentContactX >= 0 ? .forehand : .backhand)
+                pendingPlan = prepared
+                nextOpponentReturn = elapsed + prepared.delay
+                events.append(.opponentPreparing(contactX: opponentContactX, stroke: prepared.stroke, delay: prepared.delay))
             }
         }
 
@@ -162,10 +208,12 @@ public struct TennisMatch {
             pendingPlan = nil
             sequence += 1
             ball = TennisBallFlight(id: sequence, born: elapsed, duration: plan.flightDuration,
-                                    from: SIMD3<Float>(0, 0.05, -10.5),
+                                    from: SIMD3<Float>(opponentContactX, 0.05, -18),
                                     to: SIMD3<Float>(plan.targetX, -0.1, 0),
-                                    arcHeight: 2.15, direction: .towardPlayer)
-            events.append(.opponentReturn)
+                                    arcHeight: 2.25, direction: .towardPlayer,
+                                    bounce: SIMD3<Float>(plan.targetX * 0.72, -1.48, -4.2),
+                                    bounceProgress: 0.72)
+            events.append(.opponentReturn(contactX: opponentContactX, stroke: plan.stroke))
         }
 
         if ballsLeft == 0 || elapsed >= Self.duration {
@@ -183,8 +231,8 @@ public struct TennisMatch {
     @discardableResult
     public mutating func playerHit(speed: Float, horizontalDirection: Float) -> TennisEvent? {
         guard horizontalDirection.isFinite else { return nil }
-        return playerHit(speed: speed, targetX: horizontalDirection * 0.34,
-                         flightDuration: 1.3 - Double(min(speed, 4)) * 0.06)
+        return playerHit(speed: speed, targetX: horizontalDirection * 1.25,
+                         flightDuration: max(2.35, 3.05 - Double(min(speed, 4)) * 0.10))
     }
 
     /// The scene adapter supplies a tested face contact and bounded shot response.
@@ -201,10 +249,19 @@ public struct TennisMatch {
         longestRally = max(longestRally, rally)
         let points = 100 + min(250, rally * 15) + Int(min(150, speed * 28))
         score += points
-        let aim = max(-1.1, min(1.1, targetX))
-        ball = TennisBallFlight(id: incoming.id, born: elapsed, duration: min(2, max(0.9, flightDuration)),
-                                from: contact, to: SIMD3<Float>(aim, 0.05, -10.5),
-                                arcHeight: 1.8, direction: .towardOpponent)
+        // RacketGeometry emits a normalized lane (-1.1...1.1); expand that
+        // across the visible court while preserving the direct strategy API.
+        let aim = max(-4.6, min(4.6, targetX * 4.18))
+        let duration = min(4, max(0.85, flightDuration + 1.5))
+        let distance = abs(aim - opponentContactX)
+        let movement = Float(duration) * 1.35
+        let attemptedX = distance <= movement + 1
+            ? aim : opponentContactX + (aim < opponentContactX ? -1 : 1) * movement
+        ball = TennisBallFlight(id: incoming.id, born: elapsed, duration: duration,
+                                from: contact, to: SIMD3<Float>(aim, 0.05, -18),
+                                arcHeight: 2.05, direction: .towardOpponent,
+                                bounce: SIMD3<Float>(aim * 0.78, -1.48, -13.8),
+                                bounceProgress: 0.68, defenderContactX: attemptedX)
         return .playerReturn(points: points)
     }
 

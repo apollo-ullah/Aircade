@@ -105,7 +105,7 @@ final class TennisIntegrationTests: XCTestCase {
             XCTAssertEqual(rig.game.state.elapsed, TennisMatch.duration)
             XCTAssertEqual(rig.game.state.ballsLeft, TennisMatch.startingBalls)
             XCTAssertEqual(rig.game.state.misses, 0)
-            XCTAssertGreaterThanOrEqual(rig.game.state.returns, 18)
+            XCTAssertGreaterThanOrEqual(rig.game.state.returns, 10)
             XCTAssertEqual(rig.game.state.longestRally, rig.game.state.returns)
             XCTAssertEqual(rig.game.state.accuracy, 100)
             XCTAssertEqual(rig.game.state.rank, "S")
@@ -147,7 +147,7 @@ final class TennisIntegrationTests: XCTestCase {
             let target = incoming.position(at: incoming.arrival - 0.14)
             let q = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
             let baseline = target - SIMD3<Float>(0, useShaft ? 0.2 : RacketDimensions.faceCenter.y, 0)
-            for frame in 0..<160 {
+            for frame in 0..<260 {
                 if rig.game.state.misses > 0 { break }
                 let z: Float = useShaft && rig.game.state.elapsed >= incoming.arrival - 0.25
                     ? Float(frame % 2 == 0 ? 0.15 : -0.15) : 0
@@ -197,7 +197,7 @@ final class TennisIntegrationTests: XCTestCase {
             let target = simd_quatf(from: SIMD3<Float>(0, 1, 0),
                 to: simd_normalize(flight.position(at: strikeTime) - rig.hilt))
             let before = SaberPose(position: rig.hilt, orientation: simd_quatf(angle: 0.08, axis: SIMD3<Float>(1, 0, 0)) * target)
-            for _ in 0..<160 {
+            for _ in 0..<260 {
                 if rig.game.state.elapsed >= strikeTime { break }
                 rig.step(pose: before)
             }

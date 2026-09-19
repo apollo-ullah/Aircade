@@ -1,0 +1,24 @@
+model_name: aircade-tennis-opponent
+python_version: py311
+requirements: []
+resources:
+  cpu: "1"
+  memory: 1Gi
+  use_gpu: false
+model_metadata:
+  example_model_input:
+    difficulty: rival
+    score: 1200
+    misses: 1
+    longestRally: 6
+    candidates:
+      - id: deep-left
+        targetX: -0.92
+        flightDuration: 1.22
+        delay: 0.34
+        stroke: forehand
+        distance: 0.92
+        reactionTime: 1.22
+        pace: 0.82
+        targetsWeakSide: true
+        rallyLength: 6
