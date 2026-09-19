@@ -54,18 +54,18 @@ struct TennisView: View {
             HStack(spacing: 16) {
                 Text("aircade").foregroundStyle(courtBlue).font(.system(size: 34, weight: .medium)).tracking(-1)
                 Rectangle().fill(courtBlue.opacity(0.25)).frame(width: 1, height: 30)
-                Button("Neon Rush") { motion.selectSport(.neonRush) }.buttonStyle(.plain).foregroundStyle(.secondary)
+                MotionButton("Neon Rush") { motion.selectSport(.neonRush) }.buttonStyle(.plain).foregroundStyle(.secondary)
                 Text("Tennis").fontWeight(.bold).foregroundStyle(courtBlue)
                 Spacer()
                 if let player = players.player {
-                    Button { players.showingSignIn = true } label: { Label(player.nickname, systemImage: "person.crop.circle.fill") }.buttonStyle(WiiButtonStyle())
-                    Button("Log out") { players.logout() }.buttonStyle(WiiButtonStyle())
+                    MotionButton { players.showingSignIn = true } label: { Label(player.nickname, systemImage: "person.crop.circle.fill") }.buttonStyle(WiiButtonStyle())
+                    MotionButton("Log out") { players.logout() }.buttonStyle(WiiButtonStyle())
                 } else {
-                    Button("Scan badge") { players.showingSignIn = true }.buttonStyle(WiiButtonStyle()).disabled(!players.profilesAvailable)
+                    MotionButton("Scan badge") { players.showingSignIn = true }.buttonStyle(WiiButtonStyle()).disabled(!players.profilesAvailable)
                 }
-                Button { NSWorkspace.shared.open(players.leaderboardURL) } label: { Image(systemName: "trophy") }.help("Open leaderboard").disabled(!players.profilesAvailable)
+                MotionButton { NSWorkspace.shared.open(players.leaderboardURL) } label: { Image(systemName: "trophy") }.help("Open leaderboard").disabled(!players.profilesAvailable)
                 ActiveControllerBadge(motion: motion, controllers: motion.controllers)
-                Button { showingSetup = true } label: { Label("Controller", systemImage: "airpodspro") }.buttonStyle(WiiButtonStyle())
+                MotionButton { showingSetup = true } label: { Label("Controller", systemImage: "airpodspro") }.buttonStyle(WiiButtonStyle())
             }.padding(.horizontal, 34).padding(.vertical, 20).background(.white.opacity(0.96))
 
             HStack(alignment: .top, spacing: 26) {
@@ -87,7 +87,7 @@ struct TennisView: View {
                         rule("2", "SWING", "Meet it near your racket with a deliberate stroke.")
                         rule("3", "RALLY", "The opponent sends every good shot back automatically.")
                     }
-                    Button {
+                    MotionButton(id: "start-tennis") {
                         if game.inputReady { game.start(demo: motion.activeInputSimulated) }
                         else { showingSetup = true }
                     } label: {
@@ -142,7 +142,7 @@ struct TennisView: View {
             }.wiiReadout()
             Spacer()
             VStack(alignment: .trailing, spacing: 9) {
-                HStack { Text("BALLS").font(.system(size: 12, weight: .semibold)).tracking(1); Button { game.pause() } label: { Image(systemName: "pause.fill") }.buttonStyle(.plain) }
+                HStack { Text("BALLS").font(.system(size: 12, weight: .semibold)).tracking(1); MotionButton { game.pause() } label: { Image(systemName: "pause.fill") }.buttonStyle(.plain) }
                 HStack(spacing: 7) {
                     ForEach(0..<TennisMatch.startingBalls, id: \.self) { index in
                         Circle().fill(index < game.state.ballsLeft ? Color.yellow : .black.opacity(0.45)).frame(width: 18, height: 18)
@@ -158,7 +158,7 @@ struct TennisView: View {
             Text("AUTOMATIC RETURNER").font(.system(size: 10, weight: .bold)).foregroundStyle(.yellow)
             Spacer(); ActiveControllerBadge(motion: motion, controllers: motion.controllers)
             Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
-            Button { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }.buttonStyle(.plain)
+            MotionButton { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }.buttonStyle(.plain)
         }.foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 2, y: 1)
             .padding(24).background(LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom))
     }
@@ -178,7 +178,7 @@ struct TennisView: View {
             Label(game.inputReady ? "\(motion.activeControllerName) ready" : "Waiting for \(motion.activeControllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 .foregroundStyle(game.inputReady ? courtBlue : .orange)
             actionButton("Back to the court") { game.resume() }.disabled(!game.inputReady)
-            HStack(spacing: 22) { Button("Controller setup") { showingSetup = true }; Button("End run") { game.leave() } }
+            HStack(spacing: 22) { MotionButton("Controller setup") { showingSetup = true }; MotionButton("End run") { game.leave() } }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
         }
     }
@@ -203,9 +203,9 @@ struct TennisView: View {
             Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
-                Button("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
-                Button("Next player") { game.leave(); players.nextPlayer() }
-                Button("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: "Tennis")) }
+                MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
+                MotionButton("Next player") { game.leave(); players.nextPlayer() }
+                MotionButton("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: "Tennis")) }
             }.buttonStyle(.plain).foregroundStyle(.secondary)
         }
     }
@@ -223,7 +223,7 @@ struct TennisView: View {
         }
     }
     private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { HStack { Text(title); Spacer(); Image(systemName: "arrow.right") }.font(.system(size: 13, weight: .bold, design: .monospaced)).padding(18).foregroundStyle(.white).background(courtBlue, in: RoundedRectangle(cornerRadius: 6)) }.buttonStyle(.plain)
+        MotionButton(action: action) { HStack { Text(title); Spacer(); Image(systemName: "arrow.right") }.font(.system(size: 13, weight: .bold, design: .monospaced)).padding(18).foregroundStyle(.white).background(courtBlue, in: RoundedRectangle(cornerRadius: 6)) }.buttonStyle(.plain)
     }
     private func stat(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(value).font(.system(size: 24, weight: .bold)).monospacedDigit(); Text(label).font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(1).foregroundStyle(.secondary) }

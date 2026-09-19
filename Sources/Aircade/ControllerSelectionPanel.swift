@@ -37,8 +37,8 @@ struct ControllerSelectionPanel: View {
                     Text(motion.sourceMismatch ? motion.controllerLabel : controllers.readiness(for: .airPod))
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     HStack {
-                        Button(motion.running ? "Reconnect AirPods" : "Start AirPods") { motion.start() }
-                        Button("Recenter") { controllers.recenter(.airPod) }.disabled(!motion.hasFreshMotion)
+                        MotionButton(motion.running ? "Reconnect AirPods" : "Start AirPods") { motion.start() }
+                        MotionButton("Recenter") { controllers.recenter(.airPod) }.disabled(!motion.hasFreshMotion)
                     }.buttonStyle(WiiButtonStyle())
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 Divider()
@@ -48,8 +48,8 @@ struct ControllerSelectionPanel: View {
                         Text(controllers.readiness(for: .phone)).font(.callout).foregroundStyle(.secondary)
                         Text("Hold portrait, screen facing you, top edge up.").font(.caption).foregroundStyle(.secondary)
                         HStack {
-                            Button("Recenter iPhone") { controllers.recenter(.phone) }
-                            Button("Unpair") { controllers.forgetPhone() }
+                            MotionButton("Recenter iPhone") { controllers.recenter(.phone) }
+                            MotionButton("Unpair") { controllers.forgetPhone() }
                         }.buttonStyle(WiiButtonStyle())
                     } else {
                         Text("Open Aircade Controller on your phone, select this Mac, and enter:")

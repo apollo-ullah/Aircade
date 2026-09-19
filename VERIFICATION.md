@@ -179,3 +179,14 @@ The on-device `--audio-output-check` passed with **MacBook Pro Speakers**: exist
 Five new tests cover speaker selection despite an AirPods system default, no fallback to headphones, modern/legacy speaker identifiers, system-default selection, preference persistence, and decoding generated cues as audible mono PCM with the expected duration. Existing tone tests also pass. The release build and strict signature verification succeed.
 
 The final full Swift suite passes **174 tests** (79 MotionCore, 3 ControllerLink, 92 app-model); log: `/tmp/aircade-audio-full-tests.log`.
+
+
+## AirPod menu navigation — September 19
+
+The cursor now uses the same calibrated upright blade axis as gameplay: left/right lean moves horizontally, forward/back tilt moves vertically. A shared native-button target registry replaces home-only flick selection with a one-second visible dwell ring across channels, game setup, pause/results actions, settings and the bottom navigation bar. Disabled targets, stale motion, mouse override, background windows and sheets cancel selection; active gameplay disables the menu pointer. New menus require movement before accepting a hold. Normal launches reconnect an existing saved AirPod grip. The working grip-calibration algorithm is unchanged. Initial pairing, permissions, calibration and text-entry sheets still require mouse/keyboard.
+
+Native testing exposed a timer-lifetime defect: high-frequency MotionModel publications reconstructed the shell's timer publisher and could starve cursor updates. The shell now preserves that publisher with SwiftUI state. This fix was necessary for reliable rendered navigation, beyond the isolated pointer tests.
+
+**179 tests pass** (80 MotionCore, 3 ControllerLink, 96 app-model), including calibrated axis mapping, upright twist rejection, dwell activation/rearming, stale-input and mouse cancellation, and gameplay gating. Log: `/tmp/aircade-menu-full-tests.log`. Release build and strict signature verification pass.
+
+The new `--menu-smoke` harness feeds quaternion poses aimed at actual rendered button frames; it never calls the button actions directly. It successfully selected eight targets: Tennis → Play → Back to menu, Neon Rush → Play → Back to menu, Settings → Back to menu. It additionally verified the cursor was disabled during gameplay. The harness pauses games programmatically to expose their pause menus; selection itself remains pose-driven. Report: `build/menu-smoke/menu-smoke-result.json`; final screenshot: `build/menu-smoke/menu-final.png`. No scores were queued. This is synthetic navigation evidence, not a physical AirPod usability or latency measurement.

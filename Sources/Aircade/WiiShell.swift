@@ -5,13 +5,16 @@ import simd
 /// Root container. Owns navigation, the bottom bar, and the cursor overlay.
 struct WiiShell: View {
     @ObservedObject var motion: MotionModel
-    @StateObject private var pointer = PointerModel()
+    @ObservedObject private var menu: ControllerMenu
+    @State private var window: NSWindow?
     @State private var route: Route
-    @State private var previousPointerSample: ControllerSnapshot?
-    private let pointerClock = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    // MotionModel publishes every sensor frame. Preserve this publisher when
+    // ContentView reconstructs the shell, or updates can keep postponing its tick.
+    @State private var pointerClock = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
 
     init(motion: MotionModel) {
         self.motion = motion
+        self.menu = motion.menu
         _route = State(initialValue: WiiShell.initialRoute(arguments: CommandLine.arguments))
     }
 
@@ -29,23 +32,29 @@ struct WiiShell: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            GeometryReader { geo in
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay { if route == .home { WiiCursorView(pointer: pointer, size: geo.size) } }
-                    .onContinuousHover { phase in
-                        guard case let .active(location) = phase, route == .home else { return }
-                        pointer.ingestMouse(CGPoint(x: location.x / geo.size.width,
-                                                    y: location.y / geo.size.height))
-                    }
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                bottomBar
             }
-            bottomBar
+            .coordinateSpace(name: "controllerMenu")
+            .environment(\.controllerMenu, menu)
+            .background(MenuWindowReader { window = $0 })
+            .onPreferenceChange(ControllerMenuFrames.self) { menu.setTargets($0) }
+            .overlay { if menu.active { WiiCursorView(pointer: menu.pointer, menu: menu, size: geo.size) } }
+            .onContinuousHover { phase in
+                guard case let .active(location) = phase else { return }
+                menu.mouse(CGPoint(x: location.x / geo.size.width, y: location.y / geo.size.height))
+            }
+            .onAppear { menu.size = geo.size }
+            .onChange(of: geo.size) { menu.size = geo.size; menu.reset() }
         }
             .background(WiiTheme.stage)
-            .onChange(of: motion.controllers.revision) { feedPointer() }
-            .onChange(of: motion.controllers.menuDevice) { previousPointerSample = nil; pointer.recenter(); feedPointer() }
+            .onChange(of: motion.controllers.menuDevice) { menu.reset(); feedPointer() }
             .onReceive(pointerClock) { _ in feedPointer() }
+            .onReceive(NotificationCenter.default.publisher(for: .wiiPointerFlick)) { _ in
+                if window?.attachedSheet == nil && NSApp.isActive { menu.clickHovered() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .wiiRouteRequest)) { note in
                 if let requested = note.object as? Route { open(requested) }
             }
@@ -60,27 +69,38 @@ struct WiiShell: View {
     }
 
     private func feedPointer() {
-        guard route == .home else { return }
+        let inMenus: Bool
+        let phase: String
+        switch route {
+        case .neonRush:
+            phase = motion.game.state.phase.rawValue
+            inMenus = [.menu, .paused, .results].contains(motion.game.state.phase)
+        case .tennis:
+            phase = motion.tennis.state.phase.rawValue
+            inMenus = [.menu, .paused, .results].contains(motion.tennis.state.phase)
+        case .duel:
+            phase = String(describing: motion.multiplayer.match.phase)
+            inMenus = [.lobby, .paused, .results].contains(motion.multiplayer.match.phase)
+        case .lab: phase = "practice"; inMenus = false
+        default: phase = "menu"; inMenus = true
+        }
+        let foreground = NSApp.isActive && window?.isKeyWindow == true && window?.attachedSheet == nil
+        menu.update(sample: motion.controllers.snapshot(for: menuInputDevice),
+                    time: ProcessInfo.processInfo.systemUptime, context: "\(route)-\(phase)", enabled: inMenus && foreground)
+    }
+
+    private var menuInputDevice: ControllerDevice {
+        let selected = motion.controllers.menuDevice
         let time = ProcessInfo.processInfo.systemUptime
-        guard let sample = motion.controllers.snapshot(for: motion.controllers.menuDevice), sample.ready else {
-            _ = pointer.ingestMotion(orientation: simd_quatf(), sampleAge: .infinity, speed: 0, time: time)
-            previousPointerSample = nil; return
-        }
-        var speed = 0.0
-        if let previous = previousPointerSample, previous.controllerID == sample.controllerID,
-           previous.sessionID == sample.sessionID, sample.capturedAt > previous.capturedAt {
-            let dot = min(1, abs(simd_dot(previous.orientation.vector, sample.orientation.vector)))
-            speed = Double(2 * acos(dot)) / (sample.capturedAt - previous.capturedAt)
-        }
-        let selected = pointer.ingestMotion(orientation: sample.orientation, sampleAge: sample.age(at: time), speed: speed, time: time)
-        previousPointerSample = sample
-        if selected { NotificationCenter.default.post(name: .wiiPointerFlick, object: nil) }
+        if let snapshot = motion.controllers.snapshot(for: selected), snapshot.ready, snapshot.age(at: time) < 1 { return selected }
+        let alternative: ControllerDevice = selected == .airPod ? .phone : .airPod
+        return motion.controllers.snapshot(for: alternative)?.isFresh(at: time) == true ? alternative : selected
     }
 
     @ViewBuilder private var content: some View {
         switch route {
         case .home:
-            ChannelGrid(pointer: pointer) { open($0) }
+            ChannelGrid() { open($0) }
         case .neonRush:
             NeonRushView(motion: motion, game: motion.game, players: motion.players)
         case .tennis:
@@ -104,7 +124,7 @@ struct WiiShell: View {
         guard next != route else { return }
         WiiAudio.shared.play(next == .home ? .close : .open)
         if next == .home { WiiAudio.shared.startMusic() } else { WiiAudio.shared.stopMusic() }
-        pointer.recenter(); previousPointerSample = nil
+        menu.reset()
         // Script setup starts the production game before asking the shell to show it.
         if next == .neonRush && motion.scriptedScenario != nil { motion.shellRoute = next }
         else { activate(next) }
@@ -130,14 +150,14 @@ struct WiiShell: View {
 
     private var bottomBar: some View {
         HStack(spacing: 12) {
-            Button { open(.settings) } label: {
+            MotionButton(id: "settings") { open(.settings) } label: {
                 Text("air").font(WiiTheme.display(14, .bold)).italic()
             }
             .buttonStyle(WiiButtonStyle())
             .accessibilityLabel("Aircade settings")
 
             if route != .home {
-                Button("Back to menu") { open(.home) }
+                MotionButton("Back to menu") { open(.home) }
                     .buttonStyle(WiiButtonStyle())
                     .keyboardShortcut(.escape, modifiers: [])
             }
@@ -157,8 +177,8 @@ struct WiiShell: View {
     }
 
     private var statusText: String {
-        if route == .home && pointer.source == .motion { return "\(motion.controllers.name(for: motion.controllers.menuDevice)) pointing · flick to select" }
-        if route == .home { return "Mouse control · connect an AirPod or iPhone to point" }
+        if menu.active { return "\(motion.controllers.name(for: menuInputDevice)) · tilt to point · hold 1 second to select" }
+        if route == .home { return motion.running ? motion.status : "Start AirPods in Controllers to point through menus" }
         if route == .lab { return motion.controllers.readiness(for: .airPod) }
         if route == .duel {
             if motion.multiplayer.scripted { return "Scripted duel · simulated controllers" }

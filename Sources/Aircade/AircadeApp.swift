@@ -14,6 +14,9 @@ struct AircadeApp: App {
                     NSApp.setActivationPolicy(.regular)
                     NSApp.activate(ignoringOtherApps: true)
                     motion.startControllerSession()
+                    if CommandLine.arguments.count == 1 && ProcessInfo.processInfo.environment["AIRCADE_LOG_DIRECTORY"] == nil {
+                        motion.reconnectSavedAirPodForMenus()
+                    }
                     if CommandLine.arguments.contains("--tennis-preview") { motion.selectSport(.tennis) }
                     if CommandLine.arguments.contains("--calibration-preview") || CommandLine.arguments.contains("--simple-calibration-preview") {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -68,6 +71,7 @@ struct AircadeApp: App {
                     if CommandLine.arguments.contains("--shell-smoke") { ShellSmoke.run(motion) }
                     if CommandLine.arguments.contains("--leaderboard-preview") { LeaderboardPreview.run(motion) }
                     if CommandLine.arguments.contains("--audio-output-check") { AudioOutputCheck.run(motion) }
+                    if CommandLine.arguments.contains("--menu-smoke") { MenuSmoke.run(motion) }
                     if CommandLine.arguments.contains("--scripted-repro") { ScriptedGameCheck.run(motion, reproduce: true) }
                     if CommandLine.arguments.contains("--scripted-game-test") { ScriptedGameCheck.run(motion) }
                     if CommandLine.arguments.contains("--scripted-demo") { motion.startScripted(.perfectRun) }

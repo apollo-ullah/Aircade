@@ -32,8 +32,7 @@ enum ChannelCatalog {
 }
 
 extension Notification.Name {
-    /// Posted by the shell when a flick should click at the cursor's position.
-    /// The grid owns hover state, so it is the thing that can act on it.
+    /// Legacy name retained for the Space shortcut. Motion selection uses dwell.
     static let wiiPointerFlick = Notification.Name("WiiPointerFlick")
     static let wiiRouteRequest = Notification.Name("WiiRouteRequest")
 }
@@ -48,11 +47,8 @@ struct ChannelFramesKey: PreferenceKey {
 }
 
 struct ChannelGrid: View {
-    @ObservedObject var pointer: PointerModel
     var open: (Route) -> Void
 
-    @State private var frames: [Route: CGRect] = [:]
-    @State private var hovered: Route?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 18), count: 3)
 
@@ -62,44 +58,24 @@ struct ChannelGrid: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text("aircade").font(WiiTheme.display(44)).foregroundStyle(WiiTheme.accentDeep)
                     Spacer()
-                    Text("Little controllers. Big games.").font(WiiTheme.display(18, .medium)).foregroundStyle(WiiTheme.inkSoft)
+                    Text("Tilt to aim · hold for 1 second to open").font(WiiTheme.display(18, .medium)).foregroundStyle(WiiTheme.inkSoft)
                 }
             LazyVGrid(columns: columns, spacing: 18) {
                 ForEach(ChannelCatalog.all) { channel in
                     tile(channel, height: min(230, max(160, (geo.size.height - 180) / 2)))
-                        .background {
-                            GeometryReader { tileGeo in
-                                Color.clear.preference(
-                                    key: ChannelFramesKey.self,
-                                    value: [channel.route: tileGeo.frame(in: .named("grid"))])
-                            }
-                        }
+
                 }
             }
             }
             .padding(.horizontal, max(26, (geo.size.width - 1160) / 2))
             .padding(.top, 38)
-            .coordinateSpace(name: "grid")
-            .onPreferenceChange(ChannelFramesKey.self) { frames = $0 }
-            .onChange(of: pointer.unitPoint) {
-                let next = ChannelCatalog.channel(at: pointer.unitPoint, frames: frames, in: geo.size)
-                if next != hovered {
-                    hovered = next
-                    if next != nil { WiiAudio.shared.play(.hover) }
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .wiiPointerFlick)) { _ in
-                if let hovered {
-                    WiiAudio.shared.play(.select)
-                    open(hovered)
-                }
-            }
+
         }
         .background(WiiTheme.stage)
     }
 
     private func tile(_ channel: Channel, height: CGFloat) -> some View {
-        Button { open(channel.route) } label: {
+        MotionButton(id: "channel-\(channel.route)") { open(channel.route) } label: {
             VStack(spacing: 0) {
                 // The sweep goes over the banner, which is artwork only. The
                 // name strip below it stays clear so the label reads crisply.
@@ -119,13 +95,8 @@ struct ChannelGrid: View {
             }
             .frame(height: height)
             .clipShape(RoundedRectangle(cornerRadius: WiiTheme.tileRadius))
-            .overlay(RoundedRectangle(cornerRadius: WiiTheme.tileRadius)
-                .stroke(hovered == channel.route ? WiiTheme.accent : WiiTheme.hairline,
-                        lineWidth: hovered == channel.route ? 2.5 : 1))
-            .shadow(color: WiiTheme.shadow.opacity(hovered == channel.route ? 0.28 : 0.12),
-                    radius: hovered == channel.route ? 10 : 3, y: 2)
-            .scaleEffect(hovered == channel.route ? 1.04 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: hovered)
+            .overlay(RoundedRectangle(cornerRadius: WiiTheme.tileRadius).stroke(WiiTheme.hairline, lineWidth: 1))
+            .shadow(color: WiiTheme.shadow.opacity(0.12), radius: 3, y: 2)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(channel.title)

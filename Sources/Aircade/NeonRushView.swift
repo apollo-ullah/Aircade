@@ -86,7 +86,7 @@ struct NeonRushView: View {
                 Text("Pick your pace").font(WiiTheme.display(15, .semibold))
                 HStack(spacing: 10) {
                     ForEach(RushDifficulty.allCases, id: \.self) { difficulty in
-                        Button { game.difficulty = difficulty } label: {
+                        MotionButton { game.difficulty = difficulty } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Image(systemName: difficulty == .chill ? "sun.max.fill" : "bolt.fill")
@@ -102,7 +102,7 @@ struct NeonRushView: View {
                         }.buttonStyle(.plain)
                     }
                 }
-                Button {
+                MotionButton(id: "start-neon-rush") {
                     if game.inputReady { game.start(demo: motion.activeInputSimulated) }
                     else { showingSetup = true }
                 } label: {
@@ -114,9 +114,9 @@ struct NeonRushView: View {
                     }.font(WiiTheme.display(18)).padding(.vertical, 6)
                 }.buttonStyle(WiiButtonStyle(primary: true))
                 HStack {
-                    Button("How to play") { showHowTo.toggle() }
+                    MotionButton("How to play") { showHowTo.toggle() }
                     Spacer()
-                    Button { motion.start(demo: true)
+                    MotionButton { motion.start(demo: true)
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { game.start(demo: true) }
                     } label: { Label("Watch demo", systemImage: "play.rectangle") }
                 }.buttonStyle(.plain).font(WiiTheme.body(13, .medium)).foregroundStyle(rushLime)
@@ -141,7 +141,7 @@ struct NeonRushView: View {
                         rule("×", "AVOID", "Red hazards cost one energy.", .red)
                     }.padding(22).frame(width: 300).wiiPanel()
                 }
-                Button { showingSetup = true } label: {
+                MotionButton { showingSetup = true } label: {
                     ActiveControllerBadge(motion: motion, controllers: motion.controllers)
                         .padding(12).wiiPanel()
                 }.buttonStyle(.plain)
@@ -175,7 +175,7 @@ struct NeonRushView: View {
             Text("FIND YOUR FLOW").font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundStyle(rushLime)
             Text("1. Connect and calibrate in Controller setup.\n\n2. Wait for blocks to reach you, then sweep your blade through them.\n\n3. Cut in the arrow's direction. Keep your blade away from red × blocks.\n\n4. Five clean cuts increase your multiplier. A miss, wrong cut, or hazard breaks your combo.")
                 .font(.callout).foregroundStyle(WiiTheme.ink.opacity(0.75))
-            Button("Got it") { showHowTo = false }.buttonStyle(.bordered)
+            MotionButton("Got it") { showHowTo = false }.buttonStyle(.bordered)
         }.padding(24).frame(maxWidth: 360).wiiPanel()
     }
     private var hud: some View {
@@ -199,7 +199,7 @@ struct NeonRushView: View {
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 20) {
                     Text("ENERGY").font(.system(size: 12, weight: .semibold)).tracking(1)
-                    Button { game.pause() } label: { Image(systemName: "pause.fill").padding(5) }
+                    MotionButton { game.pause() } label: { Image(systemName: "pause.fill").padding(5) }
                         .buttonStyle(.plain).accessibilityLabel("Pause game")
                 }
                 HStack(spacing: 7) {
@@ -219,11 +219,11 @@ struct NeonRushView: View {
             if game.isDemo { Text(motion.scriptedScenario == nil ? "DEMO · NO HIGH SCORE" : "SCRIPTED · NO HIGH SCORE").font(.system(size: 11, weight: .bold)).foregroundStyle(.yellow) }
             Spacer()
             if let script = motion.scriptedScenario {
-                Button("Change test") { showingScripts = true }.buttonStyle(.bordered).help(script.rawValue)
+                MotionButton("Change test") { showingScripts = true }.buttonStyle(.bordered).help(script.rawValue)
             }
             ActiveControllerBadge(motion: motion, controllers: motion.controllers)
             Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
-            Button { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }
+            MotionButton { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }
                 .buttonStyle(.plain).accessibilityLabel(game.sound ? "Mute sound" : "Enable sound")
         }.foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 2, y: 1)
             .padding(24).background(LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom))
@@ -243,9 +243,9 @@ struct NeonRushView: View {
                 .foregroundStyle(game.inputReady ? rushLime : .orange).font(.callout)
             actionButton("Back to the game") { game.resume() }.disabled(!game.inputReady)
             HStack(spacing: 22) {
-                Button("Controller setup") { showingSetup = true }
-                Button("Scripted test") { showingScripts = true }
-                Button("End run") { game.leave() }
+                MotionButton("Controller setup") { showingSetup = true }
+                MotionButton("Scripted test") { showingScripts = true }
+                MotionButton("End run") { game.leave() }
             }.buttonStyle(.plain).foregroundStyle(.secondary).font(.callout)
         }
     }
@@ -271,11 +271,11 @@ struct NeonRushView: View {
             Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
-                Button("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
-                Button("Next player") { game.leave(); players.nextPlayer() }
-                Button("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: game.state.difficulty.rawValue)) }
-                if motion.scriptedScenario != nil { Button("Change scripted test") { showingScripts = true } }
-                if !game.inputReady { Button("Connect controller") { showingSetup = true } }
+                MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
+                MotionButton("Next player") { game.leave(); players.nextPlayer() }
+                MotionButton("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: game.state.difficulty.rawValue)) }
+                if motion.scriptedScenario != nil { MotionButton("Change scripted test") { showingScripts = true } }
+                if !game.inputReady { MotionButton("Connect controller") { showingSetup = true } }
             }.buttonStyle(.plain).foregroundStyle(.secondary).font(.callout)
         }
     }
@@ -303,7 +303,7 @@ struct NeonRushView: View {
         }
     }
     private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        MotionButton(action: action) {
             HStack { Text(title); Spacer(); Image(systemName: "arrow.right") }
                 .font(.system(size: 13, weight: .bold, design: .monospaced)).padding(18)
                 .foregroundStyle(.white).background(rushLime, in: RoundedRectangle(cornerRadius: 6))
@@ -349,7 +349,7 @@ private struct ControllerSetupContent: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack {
                 Text("YOUR CONTROLLER").font(.system(size: 22, weight: .bold, design: .default))
-                Spacer(); Button("Done", action: done).keyboardShortcut(.cancelAction)
+                Spacer(); MotionButton("Done", action: done).keyboardShortcut(.cancelAction)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -358,7 +358,7 @@ private struct ControllerSetupContent: View {
                     setupStep("01", "Connect your AirPods") {
                         Text("Turn off Automatic Ear Detection. Hold one earbud in a consistent grip.").font(.callout).foregroundStyle(.secondary)
                         HStack {
-                            Button(motion.running && !motion.simulated ? "Reconnect AirPods" : "Start AirPods") { motion.start() }.buttonStyle(.borderedProminent).tint(rushLime).foregroundStyle(.black)
+                            MotionButton(motion.running && !motion.simulated ? "Reconnect AirPods" : "Start AirPods") { motion.start() }.buttonStyle(.borderedProminent).tint(rushLime).foregroundStyle(.black)
                             Text(motion.status).font(.caption)
                         }
                         if motion.running && !motion.simulated {
@@ -378,9 +378,9 @@ private struct ControllerSetupContent: View {
                         Text(motion.hasGripCalibration ? "Grip saved for your \(motion.controllerName). Recalibrate if it has moved in your fingers." : "Follow the animated guide so left, right, and forward feel natural.")
                             .font(.callout).foregroundStyle(.secondary)
                         HStack {
-                            Button(motion.calibrationButtonTitle) { motion.beginGripCalibration() }
+                            MotionButton(motion.calibrationButtonTitle) { motion.beginGripCalibration() }
                                 .disabled(!motion.hasFreshMotion || motion.simulated)
-                            Button("Recenter [R]") { motion.recenter() }.disabled(!motion.hasFreshMotion)
+                            MotionButton("Recenter [R]") { motion.recenter() }.disabled(!motion.hasFreshMotion)
                         }
                     }
                     setupStep("03", "Add hand movement · optional") {
@@ -389,8 +389,8 @@ private struct ControllerSetupContent: View {
                         if motion.useCamera {
                             Picker("Camera", selection: $camera.selectedID) { ForEach(camera.devices) { Text($0.name).tag($0.id) } }.disabled(camera.running)
                             HStack {
-                                Button(camera.running ? "Restart camera" : "Start camera") { motion.startCamera() }
-                                Button("Refresh") { camera.refreshDevices() }.disabled(camera.running)
+                                MotionButton(camera.running ? "Restart camera" : "Start camera") { motion.startCamera() }
+                                MotionButton("Refresh") { camera.refreshDevices() }.disabled(camera.running)
                             }
                             HandPreview(tracker: camera)
                             Text(camera.status).font(.caption)
@@ -405,7 +405,7 @@ private struct ControllerSetupContent: View {
                     }
                     Text("Keep the earbud secure. Use comfortable wrist or forearm tilts. R recenters your grip; a tracking interruption pauses the game.").font(.caption).foregroundStyle(.secondary)
                     }
-                    Button("Open test lab & diagnostics") { done(); motion.showLab(true) }.buttonStyle(.plain).foregroundStyle(rushLime)
+                    MotionButton("Open test lab & diagnostics") { done(); motion.showLab(true) }.buttonStyle(.plain).foregroundStyle(rushLime)
                 }
             }
         }.padding(26).frame(width: 610, height: 690).background(WiiTheme.stageMid).preferredColorScheme(.light).tint(rushLime)
@@ -428,7 +428,7 @@ struct ControllerSourceStatus: View {
                 Text("\(motion.controllerLabel). macOS changed the sensor. Hold the selected earbud, or explicitly choose the new one. Calibration restarts when you switch.")
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
                 if motion.canAdoptIncomingSource {
-                    Button("Use \(motion.incomingSource) AirPod instead") { motion.adoptIncomingSource() }
+                    MotionButton("Use \(motion.incomingSource) AirPod instead") { motion.adoptIncomingSource() }
                 }
             }
         }.foregroundStyle(motion.sourceMismatch ? Color.orange : WiiTheme.ink)

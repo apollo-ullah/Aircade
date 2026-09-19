@@ -10,7 +10,7 @@ struct MultiplayerView: View {
             SaberView(controller: duel.scene.court).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack {
-                    Button { motion.showMultiplayer(false) } label: { Label("Aircade", systemImage: "chevron.left") }
+                    MotionButton { motion.showMultiplayer(false) } label: { Label("Aircade", systemImage: "chevron.left") }
                         .buttonStyle(WiiButtonStyle())
                     Text("Saber Duel").font(.system(size: 26, weight: .bold)).italic()
                     if duel.scripted { Text("SCRIPTED DEMO").font(.caption.bold()).foregroundStyle(.orange) }
@@ -19,7 +19,7 @@ struct MultiplayerView: View {
                         Text(String(format: "%d:%02d", Int(ceil(duel.match.remaining)) / 60, Int(ceil(duel.match.remaining)) % 60))
                             .font(.system(size: 28, weight: .bold)).monospacedDigit()
                         if duel.match.phase == .playing || duel.match.phase == .countdown {
-                            Button("Pause") { duel.pause() }.buttonStyle(WiiButtonStyle())
+                            MotionButton("Pause") { duel.pause() }.buttonStyle(WiiButtonStyle())
                         }
                     }
                 }.padding(22).background(.white.opacity(0.96))
@@ -76,15 +76,15 @@ struct MultiplayerView: View {
             Text("Your couch. Your arena.").font(.system(size: 32, weight: .bold)).italic()
             Text("Two independent controllers. One shared screen.").foregroundStyle(.secondary)
             ControllerSelectionPanel(motion: motion, controllers: motion.controllers, duel: true)
-            Button("AirPod grip setup") { setup = true }.buttonStyle(WiiButtonStyle())
+            MotionButton("AirPod grip setup") { setup = true }.buttonStyle(WiiButtonStyle())
             Text("Both controllers stay connected when you switch games. Blue attacks right; orange attacks left.")
                 .font(.callout).foregroundStyle(.secondary)
-            Button { duel.start() } label: {
+            MotionButton { duel.start() } label: {
                 HStack { Text(duel.bothReady ? "Start duel" : "Waiting for both controllers"); Spacer(); Image(systemName: "arrow.right") }
                     .font(.headline)
             }.buttonStyle(WiiButtonStyle(primary: true)).disabled(!duel.bothReady)
             HStack {
-                Button(duel.scripted ? "Use real controllers" : "Watch scripted duel") {
+                MotionButton(duel.scripted ? "Use real controllers" : "Watch scripted duel") {
                     duel.setScripted(!duel.scripted)
                     if duel.scripted { duel.tick(); duel.start() }
                 }.buttonStyle(.plain).foregroundStyle(WiiTheme.accentDeep)
@@ -97,10 +97,10 @@ struct MultiplayerView: View {
         VStack(spacing: 20) {
             Text("Time out.").font(.system(size: 40, weight: .bold)).italic()
             Text(duel.match.pauseReason).multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Button("Resume duel") { duel.resume() }.buttonStyle(WiiButtonStyle(primary: true)).disabled(!duel.bothReady)
+            MotionButton("Resume duel") { duel.resume() }.buttonStyle(WiiButtonStyle(primary: true)).disabled(!duel.bothReady)
             HStack(spacing: 24) {
-                Button("Controller setup") { setup = true }
-                Button("Back to lobby") { duel.lobby() }
+                MotionButton("Controller setup") { setup = true }
+                MotionButton("Back to lobby") { duel.lobby() }
             }.buttonStyle(.plain).foregroundStyle(WiiTheme.accentDeep)
         }.padding(35).frame(width: 520).wiiPanel()
     }
@@ -111,8 +111,8 @@ struct MultiplayerView: View {
                 .font(.system(size: 44, weight: .bold)).italic()
             Text("Blue \(duel.match.health[0]) — \(duel.match.health[1]) Orange").font(.title2)
             if duel.scripted { Text("Scripted inputs · hardware not verified").font(.caption).foregroundStyle(.secondary) }
-            Button("Rematch") { duel.start() }.buttonStyle(WiiButtonStyle(primary: true)).disabled(!duel.bothReady)
-            Button("Back to lobby") { duel.lobby() }.buttonStyle(.plain).foregroundStyle(WiiTheme.accentDeep)
+            MotionButton("Rematch") { duel.start() }.buttonStyle(WiiButtonStyle(primary: true)).disabled(!duel.bothReady)
+            MotionButton("Back to lobby") { duel.lobby() }.buttonStyle(.plain).foregroundStyle(WiiTheme.accentDeep)
         }.padding(36).frame(width: 440).wiiPanel()
     }
 }

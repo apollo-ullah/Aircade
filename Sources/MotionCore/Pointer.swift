@@ -5,8 +5,8 @@ import simd
 ///
 /// Consumes the same reference-relative, grip-corrected quaternion the blade
 /// uses, so grip calibration and recentering apply to the cursor unchanged.
-/// A positive rotation about +Y (turning left) yields a negative x; a positive
-/// rotation about +X (pitching up) yields a positive y.
+/// Uses the upright blade axis: the calibrated left tilt (+Z) points left,
+/// and the calibrated forward tilt (-X, toward the screen) points up.
 public struct PointerTracker {
     /// Half-width of the pointing cone, in radians.
     public var yawSpan: Double
@@ -25,11 +25,11 @@ public struct PointerTracker {
         self.deadZone = deadZone
     }
 
-    /// Yaw and pitch of the orientation's forward axis, in radians.
+    /// Screen tilts of the upright controller. Twisting its stem does not aim.
     public static func angles(_ orientation: simd_quatf) -> (yaw: Double, pitch: Double) {
-        let forward = orientation.act(SIMD3<Float>(0, 0, -1))
-        let yaw = atan2(Double(forward.x), Double(-forward.z))
-        let pitch = asin(Double(min(1, max(-1, forward.y))))
+        let up = orientation.act(SIMD3<Float>(0, 1, 0))
+        let yaw = atan2(Double(up.x), Double(up.y))
+        let pitch = atan2(Double(-up.z), Double(up.y))
         return (yaw, pitch)
     }
 
@@ -37,7 +37,8 @@ public struct PointerTracker {
     public mutating func update(orientation: simd_quatf,
                                 sampleAge: Double,
                                 staleAfter: Double = 0.5) -> SIMD2<Double> {
-        guard sampleAge <= staleAfter else {
+        guard sampleAge.isFinite, sampleAge >= 0, sampleAge <= staleAfter,
+              orientation.vector.indices.allSatisfy({ orientation.vector[$0].isFinite }) else {
             // Hold the last point: snapping to centre on every dropout would
             // throw the cursor across the screen during brief packet gaps.
             isLost = true

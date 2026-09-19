@@ -21,6 +21,7 @@ private enum HeadphoneDelivery {
 }
 
 final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDelegate {
+    let menu = ControllerMenu()
     @Published var running = false
     @Published var simulated = false
     @Published var scriptedScenario: SaberScript?
@@ -743,6 +744,13 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         controllers.recenter(selected)
     }
     func startControllerSession() { controllers.start() }
+    func reconnectSavedAirPodForMenus() {
+        guard !running, ["Left", "Right"].contains(where: {
+            guard let values = gripDefaults.array(forKey: "grip.\($0)") as? [Double] else { return false }
+            return values.count == 4 && values.allSatisfy(\.isFinite)
+        }) else { return }
+        start()
+    }
     func shutdownControllerSession() { controllers.shutdown() }
 
     private func configureControllers() {

@@ -16,9 +16,9 @@ struct PlayerChannelView: View {
                         Text("Scan. Swing. Set the score to beat.").foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button(players.player == nil ? "Scan hacker badge" : players.player!.nickname) { players.showingSignIn = true }
+                    MotionButton(players.player == nil ? "Scan hacker badge" : players.player!.nickname) { players.showingSignIn = true }
                         .buttonStyle(WiiButtonStyle(primary: true)).disabled(!players.profilesAvailable)
-                    if players.player != nil { Button("Guest") { players.selectGuest() }.buttonStyle(WiiButtonStyle()) }
+                    if players.player != nil { MotionButton("Guest") { players.selectGuest() }.buttonStyle(WiiButtonStyle()) }
                 }
                 if !players.profilesAvailable {
                     Label("Badge station is offline. Guest play and this Mac’s records still work.", systemImage: "wifi.slash")
@@ -27,11 +27,12 @@ struct PlayerChannelView: View {
                     Text("Scan your badge to keep your personal scores. Choose to join the public board when you confirm your nickname.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                Picker("Leaderboard", selection: $mode) {
-                    Text("Neon Rush · Arcade").tag("Arcade")
-                    Text("Neon Rush · Chill").tag("Chill")
-                    Text("Tennis").tag("Tennis")
-                }.pickerStyle(.segmented)
+                HStack {
+                    ForEach(["Arcade", "Chill", "Tennis"], id: \.self) { board in
+                        MotionButton(board == "Tennis" ? board : "Neon Rush · \(board)") { mode = board }
+                            .buttonStyle(WiiButtonStyle(primary: mode == board))
+                    }
+                }
                 if let standing = players.standings[mode] {
                     HStack(spacing: 28) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -46,7 +47,7 @@ struct PlayerChannelView: View {
                                 Text("\(next.pointsNeeded.formatted()) points above your best to take that spot.").font(.caption).foregroundStyle(.secondary)
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading)
-                        Button("Play again", action: play).buttonStyle(WiiButtonStyle(primary: true))
+                        MotionButton("Play again", action: play).buttonStyle(WiiButtonStyle(primary: true))
                     }.padding(22).frame(maxWidth: .infinity, alignment: .leading).wiiPanel()
                 }
                 VStack(spacing: 0) {
@@ -73,14 +74,14 @@ struct PlayerChannelView: View {
                         VStack(spacing: 10) {
                             Image(systemName: "flag.checkered").font(.system(size: 34)).foregroundStyle(WiiTheme.accentDeep)
                             Text(players.leaderboardStatus[mode] ?? "Loading leaderboard…").foregroundStyle(.secondary)
-                            Button("Play a round", action: play).buttonStyle(WiiButtonStyle(primary: true))
+                            MotionButton("Play a round", action: play).buttonStyle(WiiButtonStyle(primary: true))
                         }.padding(30).frame(maxWidth: .infinity)
                     }
                     HStack {
                         Text(players.leaderboardStatus[mode] ?? "").font(.caption).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Refresh") { players.refreshLeaderboard(mode) }.buttonStyle(.plain)
-                        Button("Open score display") { NSWorkspace.shared.open(players.leaderboardURL(for: mode)) }.buttonStyle(.plain).disabled(!players.profilesAvailable)
+                        MotionButton("Refresh") { players.refreshLeaderboard(mode) }.buttonStyle(.plain)
+                        MotionButton("Open score display") { NSWorkspace.shared.open(players.leaderboardURL(for: mode)) }.buttonStyle(.plain).disabled(!players.profilesAvailable)
                     }.padding(18)
                 }.wiiPanel()
                 HStack(spacing: 28) {
@@ -147,45 +148,50 @@ struct ArcadeSettingsView: View {
                     .font(WiiTheme.display(34)).foregroundStyle(WiiTheme.accentDeep)
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Sound").font(WiiTheme.display(22))
-                    Picker("Audio output", selection: Binding(get: { audioOutput.preference }, set: { audioOutput.select($0) })) {
+                    HStack {
+                        Text("Audio output")
                         ForEach(AudioOutputPreference.allCases) { preference in
-                            Text(preference.title).tag(preference)
+                            MotionButton(preference.title) { audioOutput.select(preference) }
+                                .buttonStyle(WiiButtonStyle(primary: audioOutput.preference == preference))
                         }
-                    }.pickerStyle(.segmented)
+                    }
                     HStack {
                         Label(audioOutput.status, systemImage: "speaker.wave.2.fill").font(.callout).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Test sound") { audioOutput.refresh(); GameAudio.shared.play("Glass") }
+                        MotionButton("Test sound") { audioOutput.refresh(); GameAudio.shared.play("Glass") }
                             .buttonStyle(WiiButtonStyle())
                     }
                     Text("Music and effects use this output. Your AirPods stay connected as controllers.")
                         .font(.caption).foregroundStyle(.secondary)
-                    Toggle("Menu music and sounds", isOn: $menuSound)
+                    Toggle("Menu music and sounds", isOn: $menuSound).controllerAction { menuSound.toggle() }
                         .onChange(of: menuSound) {
                             WiiAudio.shared.enabled = menuSound
                             if !menuSound { WiiAudio.shared.stopMusic() }
                         }
-                    Toggle("Neon Rush effects", isOn: $motion.game.sound)
-                    Toggle("Tennis effects", isOn: $motion.tennis.sound)
-                    Toggle("Practice effects", isOn: $motion.arena.sound)
+                    Toggle("Neon Rush effects", isOn: $motion.game.sound).controllerAction { motion.game.sound.toggle() }
+                    Toggle("Tennis effects", isOn: $motion.tennis.sound).controllerAction { motion.tennis.sound.toggle() }
+                    Toggle("Practice effects", isOn: $motion.arena.sound).controllerAction { motion.arena.sound.toggle() }
                 }.padding(24).frame(maxWidth: .infinity, alignment: .leading).wiiPanel()
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Menu pointer").font(WiiTheme.display(22))
-                    Picker("Point with", selection: Binding(get: { motion.controllers.menuDevice }, set: { motion.controllers.selectMenu($0) })) {
-                        Text(motion.controllers.name(for: .airPod)).tag(ControllerDevice.airPod)
-                        Text("iPhone").tag(ControllerDevice.phone)
-                    }.pickerStyle(.segmented)
-                    Text("Point to a channel and give a quick flick to open it. You can always use your mouse.")
+                    HStack {
+                        Text("Point with")
+                        ForEach(ControllerDevice.allCases) { device in
+                            MotionButton(motion.controllers.name(for: device)) { motion.controllers.selectMenu(device) }
+                                .buttonStyle(WiiButtonStyle(primary: motion.controllers.menuDevice == device))
+                        }
+                    }
+                    Text("Lean left/right to move sideways. Tip toward the screen to move up; away to move down. Hold over a button for one second until the ring fills. Move away before selecting it again.")
                         .foregroundStyle(.secondary)
                     HStack {
-                        Button("Recenter pointer") { motion.controllers.recenter(motion.controllers.menuDevice) }
-                        Button("Controller setup") { open(.controller) }
+                        MotionButton("Recenter pointer") { motion.controllers.recenter(motion.controllers.menuDevice) }
+                        MotionButton("Controller setup") { open(.controller) }
                     }.buttonStyle(WiiButtonStyle())
                 }.padding(24).frame(maxWidth: .infinity, alignment: .leading).wiiPanel()
                 HStack {
-                    Button("Practice arena") { open(.lab) }
-                    Button("Scripted game tests") { open(.scripts) }
-                    Button("Open diagnostics") { motion.revealLogs() }
+                    MotionButton("Practice arena") { open(.lab) }
+                    MotionButton("Scripted game tests") { open(.scripts) }
+                    MotionButton("Open diagnostics") { motion.revealLogs() }
                 }.buttonStyle(WiiButtonStyle())
             }.padding(32).frame(maxWidth: 960).frame(maxWidth: .infinity)
         }.foregroundStyle(WiiTheme.ink)

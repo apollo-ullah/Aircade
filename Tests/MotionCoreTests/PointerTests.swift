@@ -5,10 +5,10 @@ import simd
 final class PointerTests: XCTestCase {
     private let centred = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
     private func yaw(_ degrees: Float) -> simd_quatf {
-        simd_quatf(angle: degrees * .pi / 180, axis: SIMD3<Float>(0, 1, 0))
+        simd_quatf(angle: degrees * .pi / 180, axis: SIMD3<Float>(0, 0, 1))
     }
     private func pitch(_ degrees: Float) -> simd_quatf {
-        simd_quatf(angle: degrees * .pi / 180, axis: SIMD3<Float>(1, 0, 0))
+        simd_quatf(angle: -degrees * .pi / 180, axis: SIMD3<Float>(1, 0, 0))
     }
 
     func testCentredOrientationPointsAtTheCentre() {
@@ -19,20 +19,26 @@ final class PointerTests: XCTestCase {
         XCTAssertFalse(tracker.isLost)
     }
 
-    func testTurningRightByTheYawSpanReachesTheRightEdge() {
+    func testTwistingAnUprightControllerDoesNotMoveThePointer() {
+        var tracker = PointerTracker()
+        let twist = simd_quatf(angle: .pi / 3, axis: SIMD3<Float>(0, 1, 0))
+        XCTAssertEqual(tracker.update(orientation: twist, sampleAge: 0), .zero)
+    }
+
+    func testTiltingRightByTheHorizontalSpanReachesTheRightEdge() {
         var tracker = PointerTracker()
         let point = tracker.update(orientation: yaw(-22.5), sampleAge: 0)
         XCTAssertEqual(point.x, 1, accuracy: 0.01)
         XCTAssertEqual(point.y, 0, accuracy: 0.01)
     }
 
-    func testTurningPastTheSpanClampsToTheEdgeInBothDirections() {
+    func testTiltingPastTheSpanClampsToTheEdgeInBothDirections() {
         var tracker = PointerTracker()
         XCTAssertEqual(tracker.update(orientation: yaw(-70), sampleAge: 0).x, 1, accuracy: 0.001)
         XCTAssertEqual(tracker.update(orientation: yaw(70), sampleAge: 0).x, -1, accuracy: 0.001)
     }
 
-    func testPitchingUpByThePitchSpanReachesTheTopEdge() {
+    func testTiltingTowardScreenByTheVerticalSpanReachesTheTopEdge() {
         var tracker = PointerTracker()
         XCTAssertEqual(tracker.update(orientation: pitch(13), sampleAge: 0).y, 1, accuracy: 0.01)
     }

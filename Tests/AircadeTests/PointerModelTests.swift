@@ -13,11 +13,11 @@ final class PointerModelTests: XCTestCase {
         XCTAssertEqual(model.unitPoint.y, 0.5, accuracy: 0.001)
     }
 
-    func testPitchingUpMovesTheCursorUpTheScreen() {
+    func testCalibratedForwardTiltMovesTheCursorUpTheScreen() {
         let model = PointerModel()
-        let up = simd_quatf(angle: 13 * .pi / 180, axis: SIMD3<Float>(1, 0, 0))
+        let up = simd_quatf(angle: -13 * .pi / 180, axis: SIMD3<Float>(1, 0, 0))
         model.ingestMotion(orientation: up, sampleAge: 0, speed: 0, time: 1)
-        XCTAssertLessThan(model.unitPoint.y, 0.1, "screen y runs downward, so pitching up must lower it")
+        XCTAssertLessThan(model.unitPoint.y, 0.1, "screen y runs downward, so tipping toward the screen must lower it")
     }
 
     func testStaleMotionHandsControlBackToTheMouse() {
