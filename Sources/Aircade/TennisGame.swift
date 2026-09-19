@@ -25,6 +25,7 @@ final class TennisGame: ObservableObject {
     var authorizeRun: (() -> Bool)?
     private(set) var runID: String?
     var onRunStarted: ((Bool) -> String?)?
+    var onRunResumed: ((String?) -> Void)?
     var onRunFinished: ((TennisMatch, Bool, String?) -> Bool)?
     var onRunAbandoned: ((String?) -> Void)?
     var onJudgment: ((TennisEvent) -> Void)?
@@ -92,13 +93,14 @@ final class TennisGame: ObservableObject {
     }
 
     func resume() {
-        guard liveReady else { return }
+        guard state.phase == .paused, liveReady else { return }
         state.resume()
         lastTick = now
         recoveringInput = false
         previousPose = nil
         previousBall = nil
         previousTime = nil
+        onRunResumed?(runID)
     }
 
     func leave() {

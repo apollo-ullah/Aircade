@@ -750,6 +750,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         controllers.onInputChanged = { [weak self] _ in self?.routeGameInput() }
         controllers.onInvalidation = { [weak self] device, reason in
             guard let self, !self.showingLab, !self.showingMultiplayer, self.controllers.soloDevice == device else { return }
+            self.endSoloFeedback()
             self.lastRoutedSample = nil
             self.game.invalidateInput(reason); self.tennis.invalidateInput(reason)
         }
@@ -757,6 +758,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
             guard let self else { return }
             self.lastRoutedSample = nil
             if !self.showingMultiplayer {
+                self.endSoloFeedback()
                 self.game.invalidateInput("Controller changed. Hold your starting pose, then resume.")
                 self.tennis.invalidateInput("Controller changed. Hold your starting pose, then resume.")
                 self.routeGameInput()
@@ -767,9 +769,16 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
 
     private func beginSoloRun(game kind: ArcadeRunGame, mode: String, demo: Bool) -> String {
         let context = players.beginRun(game: kind, mode: mode, simulated: demo || activeInputSimulated)
+        renewSoloFeedback(runID: context.id)
+        return context.id
+    }
+    /// A resumed run keeps its original score owner/provenance, but its haptic
+    /// recipient follows the controller and connection explicitly resumed now.
+    private func renewSoloFeedback(runID: String?) {
+        guard let runID, players.activeRun?.id == runID else { return }
+        endSoloFeedback()
         soloFeedbackDevice = controllers.soloDevice
         soloFeedbackRun = controllers.beginRun()
-        return context.id
     }
     private func endSoloFeedback() {
         if let run = soloFeedbackRun { controllers.endRun(run) }
@@ -785,6 +794,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
             guard let self else { return nil }
             return self.beginSoloRun(game: .neonRush, mode: self.game.difficulty.rawValue, demo: demo)
         }
+        game.onRunResumed = { [weak self] id in self?.renewSoloFeedback(runID: id) }
         game.onRunFinished = { [weak self] state, demo, id in
             guard let self, let id else { return false }
             self.sendSoloFeedback(state.completed ? .victory : .defeat)
@@ -804,6 +814,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         }
         tennis.authorizeRun = { [weak self] in self?.players.authorize() ?? false }
         tennis.onRunStarted = { [weak self] demo in self?.beginSoloRun(game: .tennis, mode: "Tennis", demo: demo) }
+        tennis.onRunResumed = { [weak self] id in self?.renewSoloFeedback(runID: id) }
         tennis.onRunFinished = { [weak self] state, demo, id in
             guard let self, let id else { return false }
             self.sendSoloFeedback(state.completed ? .victory : .defeat)

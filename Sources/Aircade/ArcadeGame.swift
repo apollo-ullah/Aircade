@@ -31,6 +31,7 @@ final class ArcadeGame: ObservableObject {
     var authorizeRun: (() -> Bool)?
     private(set) var runID: String?
     var onRunStarted: ((Bool) -> String?)?
+    var onRunResumed: ((String?) -> Void)?
     var onRunFinished: ((NeonRush, Bool, String?) -> Bool)?
     var onRunAbandoned: ((String?) -> Void)?
     var onEvent: ((String) -> Void)?
@@ -83,10 +84,11 @@ final class ArcadeGame: ObservableObject {
         onEvent?("RUSH_PAUSE \(reason)")
     }
     func resume() {
-        guard liveReady else { return }
+        guard state.phase == .paused, liveReady else { return }
         state.resume(); lastTick = now
         recoveringInput = false
         previousPose = nil; previousTime = nil
+        onRunResumed?(runID)
     }
     func leave() {
         if !resultSaved, runID != nil { onRunAbandoned?(runID) }
