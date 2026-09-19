@@ -253,7 +253,7 @@ struct NeonRushView: View {
     private var connectionPill: some View {
         HStack(spacing: 7) {
             Circle().fill(game.inputReady ? rushLime : .orange).frame(width: 6, height: 6)
-            Text(motion.simulated ? "DEMO INPUT" : game.inputReady ? "CONNECTED" : "NOT CONNECTED").font(.system(size: 10, weight: .bold, design: .monospaced))
+            Text(motion.simulated ? "DEMO INPUT" : game.inputReady ? "READY" : "NO MOTION").font(.system(size: 10, weight: .bold, design: .monospaced))
         }.padding(11).background(.black.opacity(0.5), in: Capsule())
     }
     private func menuStat(_ value: String, _ label: String) -> some View {
@@ -299,8 +299,19 @@ private struct ControllerSetupContent: View {
                     setupStep("01", "Connect your AirPods") {
                         Text("Turn off Automatic Ear Detection. Hold one earbud in a consistent grip.").font(.callout).foregroundStyle(.secondary)
                         HStack {
-                            Button("Start AirPods") { motion.start() }.buttonStyle(.borderedProminent).tint(rushLime).foregroundStyle(.black)
+                            Button(motion.running && !motion.simulated ? "Reconnect AirPods" : "Start AirPods") { motion.start() }.buttonStyle(.borderedProminent).tint(rushLime).foregroundStyle(.black)
                             Text(motion.status).font(.caption)
+                        }
+                        if motion.running && !motion.simulated {
+                            Text("Permission: \(motion.authorization) · \(motion.samples) samples · \(Int(motion.frequency)) Hz")
+                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        if motion.waitingForMotion {
+                            Text("Bluetooth can be connected while the motion stream is idle. In Mac Bluetooth settings, disconnect and reconnect your AirPods, briefly wear them, then click Reconnect AirPods above. Keep Automatic Ear Detection off for handheld play.")
+                                .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                        } else if motion.samples > 0 && motion.sampleAge < 0.5 && !motion.simulated {
+                            Label("Receiving \(motion.source) AirPod motion. Recenter your grip, then press Done to play.", systemImage: "checkmark.circle.fill")
+                                .font(.caption).foregroundStyle(rushLime)
                         }
                     }
                     setupStep("02", "Match three poses") {
