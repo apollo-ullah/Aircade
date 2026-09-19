@@ -47,7 +47,7 @@ struct CalibrationGuidePanel: View {
     var useSaved: (() -> Void)? = nil
     var adoptSource: () -> Void = {}
     @State private var animationStart = Date()
-    private let cyan = Color(red: 0.35, green: 0.93, blue: 0.91)
+    private let cyan = SportsTheme.blue
     private var labels: [String] { ["Start", "Left", "Return", "Forward", "Test"] }
     private var illustrationStep: Int { step == 2 ? 2 : step == 4 ? 3 : 1 }
     private var title: String {
@@ -111,14 +111,14 @@ struct CalibrationGuidePanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 7) {
-                        Text(title).font(.system(size: 27, weight: .bold, design: .rounded))
+                        Text(title).font(.system(size: 27, weight: .bold, design: .default))
                         Text(instruction).font(.system(size: 15)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     if step == 5 {
                         CalibrationBladePreview(orientation: liveOrientation).frame(height: 240)
                     } else {
                         ZStack(alignment: .topLeading) {
-                            RoundedRectangle(cornerRadius: 18).fill(Color(red: 0.035, green: 0.065, blue: 0.10))
+                            RoundedRectangle(cornerRadius: 18).fill(Color(red: 0.84, green: 0.93, blue: 0.98))
                             TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
                                 GripAnimation(step: illustrationStep, elapsed: previewTime ?? context.date.timeIntervalSince(animationStart))
                             }
@@ -169,7 +169,7 @@ struct CalibrationGuidePanel: View {
                     .disabled(!isLive || !poseReady)
             }
         }.padding(26).frame(width: 700, height: 740)
-            .background(Color(red: 0.035, green: 0.045, blue: 0.07)).preferredColorScheme(.dark)
+            .background(SportsTheme.paper).preferredColorScheme(.light)
             .onChange(of: step) { animationStart = Date() }
     }
 }
@@ -178,7 +178,7 @@ struct CalibrationGuidePanel: View {
 /// animation is mixed into the live feedback, and no gain is applied to the angle.
 struct CalibrationBladePreview: View {
     let orientation: simd_quatf?
-    private let cyan = Color(red: 0.35, green: 0.93, blue: 0.91)
+    private let cyan = SportsTheme.blue
     var body: some View {
         Canvas { context, size in
             let direction = orientation?.act(SIMD3<Float>(0, 1, 0)) ?? SIMD3<Float>(0, 1, 0)
@@ -188,7 +188,7 @@ struct CalibrationBladePreview: View {
                 let tip = CGPoint(x: center.x + CGFloat(index == 0 ? direction.x : -direction.z) * length,
                                   y: center.y - CGFloat(direction.y) * length)
                 var neutral = Path(); neutral.move(to: center); neutral.addLine(to: CGPoint(x: center.x, y: center.y - length))
-                context.stroke(neutral, with: .color(.white.opacity(0.2)), style: StrokeStyle(lineWidth: 2, dash: [4, 5]))
+                context.stroke(neutral, with: .color(SportsTheme.ink.opacity(0.2)), style: StrokeStyle(lineWidth: 2, dash: [4, 5]))
                 var blade = Path(); blade.move(to: center); blade.addLine(to: tip)
                 context.stroke(blade, with: .color(cyan.opacity(0.2)), style: StrokeStyle(lineWidth: 16, lineCap: .round))
                 context.stroke(blade, with: .color(orientation == nil ? .gray : cyan), style: StrokeStyle(lineWidth: 5, lineCap: .round))
@@ -200,7 +200,7 @@ struct CalibrationBladePreview: View {
             context.draw(Text(orientation == nil ? "WAITING FOR LIVE MOTION" : "LIVE PREVIEW • SAME MAPPING AS THE GAME")
                 .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(.gray),
                          at: CGPoint(x: size.width / 2, y: size.height - 15))
-        }.background(Color(red: 0.035, green: 0.065, blue: 0.10), in: RoundedRectangle(cornerRadius: 18))
+        }.background(Color(red: 0.84, green: 0.93, blue: 0.98), in: RoundedRectangle(cornerRadius: 18))
     }
 }
 
@@ -209,7 +209,7 @@ struct CalibrationBladePreview: View {
 struct GripAnimation: View {
     let step: Int
     let elapsed: Double
-    private let cyan = Color(red: 0.35, green: 0.93, blue: 0.91)
+    private let cyan = SportsTheme.blue
 
     private var phase: (amount: Double, text: String) {
         if step == 1 { return (0, "HOLD UPRIGHT") }
@@ -244,7 +244,7 @@ struct GripAnimation: View {
                 var goalContext = context
                 goalContext.translateBy(x: origin.x, y: origin.y)
                 goalContext.rotate(by: .radians(goalAngle))
-                let outline = Path(roundedRect: CGRect(x: -12, y: -length, width: 24, height: length + 12), cornerRadius: 12)
+                let outline = Path(roundedRect: CGRect(x: -12, y: -length, width: 24, height: length + 12), cornerRadius: 6)
                 goalContext.stroke(outline, with: .color(cyan.opacity(0.6)), style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
                 context.draw(Text("HOLD HERE").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(cyan),
                              at: CGPoint(x: target.x + (step == 2 ? -24 : 22), y: target.y - 23))
@@ -253,7 +253,7 @@ struct GripAnimation: View {
             }
 
             // Arm and hand remain anchored while the handle tips about the wrist.
-            let arm = Path(roundedRect: CGRect(x: origin.x - 15, y: origin.y + 15, width: 30, height: 42), cornerRadius: 12)
+            let arm = Path(roundedRect: CGRect(x: origin.x - 15, y: origin.y + 15, width: 30, height: 42), cornerRadius: 6)
             context.fill(arm, with: .color(.white.opacity(0.13)))
             var gripContext = context
             gripContext.translateBy(x: origin.x, y: origin.y)
@@ -264,7 +264,7 @@ struct GripAnimation: View {
             // Small earbud symbol inside the imaginary grip, with the top marked separately.
             gripContext.fill(Path(ellipseIn: CGRect(x: -7, y: -68, width: 20, height: 14)), with: .color(.white))
             gripContext.fill(Path(roundedRect: CGRect(x: 1, y: -60, width: 6, height: 23), cornerRadius: 3), with: .color(.white))
-            let palm = Path(roundedRect: CGRect(x: -25, y: -26, width: 48, height: 43), cornerRadius: 16)
+            let palm = Path(roundedRect: CGRect(x: -25, y: -26, width: 48, height: 43), cornerRadius: 7)
             gripContext.fill(palm, with: .color(Color(red: 0.26, green: 0.33, blue: 0.40)))
             gripContext.stroke(palm, with: .color(.white.opacity(0.55)), lineWidth: 1.5)
             for y in [-21, -11, -1] {
@@ -289,7 +289,7 @@ struct GripAnimation: View {
                 context.draw(Text(step == 2 ? "← YOUR LEFT" : "TOP ↑").font(.system(size: 12, weight: .semibold)).foregroundColor(cyan),
                              at: CGPoint(x: step == 2 ? 98 : origin.x, y: step == 2 ? 159 : 65))
             }
-            context.draw(Text(phase.text).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(.white.opacity(0.8)),
+            context.draw(Text(phase.text).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(SportsTheme.ink),
                          at: CGPoint(x: size.width / 2, y: 271))
         }
         .accessibilityLabel(step == 1 ? "Hold your imaginary handle upright in a fixed grip." : step == 2 ? "From your point of view, the top leans 45 degrees left with the AirPod fixed in your grip. Your forearm can move too." : "Side view: you are on the left and your Mac is on the right. From upright, the top leans 45 degrees toward your Mac.")

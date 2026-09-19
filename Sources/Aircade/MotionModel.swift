@@ -119,7 +119,9 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     private var lastHealthWrite = 0.0
     private var demoOrigin = 0.0
 
-    override convenience init() { self.init(logDirectory: nil) }
+    override convenience init() {
+        self.init(logDirectory: ProcessInfo.processInfo.environment["AIRCADE_LOG_DIRECTORY"].map { URL(fileURLWithPath: $0, isDirectory: true) })
+    }
 
     init(logDirectory customLogDirectory: URL?) {
         logDirectory = customLogDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

@@ -9,7 +9,7 @@ struct AircadeApp: App {
         WindowGroup("Aircade · Neon Rush") {
             ContentView(motion: motion)
                 .frame(minWidth: 1120, minHeight: 760)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(.light)
                 .onAppear {
                     NSApp.setActivationPolicy(.regular)
                     NSApp.activate(ignoringOtherApps: true)
@@ -26,7 +26,7 @@ struct AircadeApp: App {
                                     sourceWarning: step == 6 ? "Selected: Left · macOS reporting: Right" : nil,
                                     adoptSourceTitle: step == 6 ? "Use Right instead & restart" : nil,
                                     restart: {}, useSaved: {})
-                                    .environment(\.colorScheme, .dark)
+                                    .environment(\.colorScheme, .light)
                                 let panel = simple ? AnyView(SimpleCalibrationPanel(step: min(step, 3), source: step == 2 ? "Right" : "Left", isLive: step != 4,
                                     message: "UI PREVIEW • synthetic data. Click to save this angle.",
                                     sourceWarning: step == 4 ? "Selected: Left · macOS reporting: Right" : nil,
@@ -34,7 +34,7 @@ struct AircadeApp: App {
                                 let host = NSHostingView(rootView: panel)
                                 let size = host.fittingSize
                                 let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
-                                window.appearance = NSAppearance(named: .darkAqua)
+                                window.appearance = NSAppearance(named: .aqua)
                                 window.contentView = host
                                 window.center()
                                 window.makeKeyAndOrderFront(nil)
@@ -133,7 +133,7 @@ struct ArenaLayout: View {
     @ObservedObject var arena: TrainingArena
     @ObservedObject var camera: HandTracker
     @State private var panel = 0
-    private let cyan = Color(red: 0.35, green: 0.93, blue: 0.91)
+    private let cyan = SportsTheme.blue
 
     var body: some View {
         VStack(spacing: 0) {
@@ -155,14 +155,14 @@ struct ArenaLayout: View {
                         SaberView(controller: motion.scene)
                         VStack(alignment: .leading, spacing: 8) {
                             Text(arena.mode.rawValue.uppercased()).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(cyan)
-                            Text(arena.message).font(.system(size: 26, weight: .bold, design: .rounded))
+                            Text(arena.message).font(.system(size: 26, weight: .bold, design: .default))
                             Text(arena.detail).font(.callout).foregroundStyle(.secondary).frame(maxWidth: 520, alignment: .leading)
                         }.padding(22).allowsHitTesting(false)
                         if !arena.inputReady {
                             VStack {
                                 Spacer()
                                 Text(inputHint).font(.callout.weight(.medium)).padding(12)
-                                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
+                                    .background(.white.opacity(0.94), in: RoundedRectangle(cornerRadius: 10))
                                     .padding(.bottom, 25)
                             }.frame(maxWidth: .infinity).allowsHitTesting(false)
                         }
@@ -200,7 +200,7 @@ struct ArenaLayout: View {
                     }
                 }.frame(width: 390)
             }
-        }.background(Color(red: 0.035, green: 0.045, blue: 0.07))
+        }.background(SportsTheme.paper)
         .sheet(isPresented: Binding(get: { motion.calibrationStep > 0 }, set: { showing in
             if !showing && motion.calibrationStep > 0 { motion.cancelGripCalibration() }
         })) {
@@ -211,7 +211,7 @@ struct ArenaLayout: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("AIRCADE").font(.system(size: 24, weight: .black, design: .rounded)).tracking(4)
+                Text("AIRCADE").font(.system(size: 24, weight: .bold, design: .default)).tracking(4)
                 Text("TRAINING ARENA   /   PROTOTYPE 02").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
             }
             Spacer()
@@ -352,7 +352,7 @@ struct ArenaLayout: View {
     private func stat(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
-            Text(value).font(.system(size: 24, weight: .semibold, design: .rounded)).monospacedDigit()
+            Text(value).font(.system(size: 24, weight: .semibold, design: .default)).monospacedDigit()
         }
     }
     private func vector(_ title: String, _ value: SIMD3<Double>, unit: String) -> some View {

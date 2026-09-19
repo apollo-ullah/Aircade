@@ -1,8 +1,8 @@
 import SwiftUI
 import MotionCore
 
-private let rushLime = Color(red: 0.76, green: 0.98, blue: 0.31)
-private let rushCream = Color(red: 0.94, green: 0.95, blue: 0.88)
+private let rushLime = SportsTheme.blue
+private let rushCream = SportsTheme.ink
 
 struct NeonRushView: View {
     @ObservedObject var motion: MotionModel
@@ -21,8 +21,8 @@ struct NeonRushView: View {
                     Spacer()
                     if !game.feedback.isEmpty && game.state.phase == .playing {
                         VStack(spacing: 5) {
-                            Text(game.feedback).font(.system(size: 23, weight: .black, design: .rounded)).italic()
-                            if game.feedbackPoints > 0 { Text("+\(game.feedbackPoints)").font(.system(size: 32, weight: .black, design: .rounded)) }
+                            Text(game.feedback).font(.system(size: 23, weight: .bold, design: .default)).italic()
+                            if game.feedbackPoints > 0 { Text("+\(game.feedbackPoints)").font(.system(size: 32, weight: .bold, design: .default)) }
                         }.foregroundStyle(game.feedbackGood ? rushLime : .red)
                             .padding(.bottom, 34).allowsHitTesting(false)
                     }
@@ -34,7 +34,7 @@ struct NeonRushView: View {
             }
         }
         .foregroundStyle(rushCream)
-        .background(Color(red: 0.025, green: 0.035, blue: 0.045))
+        .background(SportsTheme.paper).tint(rushLime)
         .sheet(isPresented: $showingSetup) {
             ControllerSetupView(motion: motion, done: { showingSetup = false })
         }
@@ -51,171 +51,176 @@ struct NeonRushView: View {
     }
 
     private var menu: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
+        VStack(spacing: 0) {
+            HStack(spacing: 18) {
                 brand
-                Text("THE POCKET ARCADE").font(.system(size: 10, weight: .medium, design: .monospaced)).tracking(2).foregroundStyle(.white.opacity(0.45))
+                Rectangle().fill(SportsTheme.blue.opacity(0.25)).frame(width: 1, height: 30)
+                Text("Motion sports, in your hands.").font(.system(size: 14, weight: .medium, design: .default)).foregroundStyle(.secondary)
                 Spacer()
                 connectionPill
                 Button { showingSetup = true } label: { Label("Controller", systemImage: "airpodspro") }
-                    .buttonStyle(.bordered).controlSize(.large)
-            }.padding(.bottom, 22)
-            GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: geometry.size.height < 650 ? 12 : 16) {
-                        HStack(spacing: 8) {
-                            Circle().fill(rushLime).frame(width: 6, height: 6)
-                            Text("GAME 01   /   SABER SURVIVAL").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(2)
-                        }.foregroundStyle(rushLime)
-                        Text("NEON\nRUSH.").font(.system(size: min(94, geometry.size.height * 0.14), weight: .black, design: .rounded))
-                            .italic().tracking(-5).lineSpacing(-12).fixedSize(horizontal: false, vertical: true)
-                        Text("Small controller. Big energy.").font(.system(size: 21, weight: .medium, design: .rounded))
-                        Text("Slice the neon. Dodge the red.\nKeep your combo alive for 60 seconds.")
-                            .font(.system(size: 15)).foregroundStyle(.white.opacity(0.6)).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 18) {
-                            menuStat("60", "SECONDS")
-                            menuStat("03", "ROUNDS")
-                            menuStat("×4", "MAX COMBO")
-                        }.padding(.vertical, 7)
-                        HStack(spacing: 8) {
-                            ForEach(RushDifficulty.allCases, id: \.self) { difficulty in
-                                Button { game.difficulty = difficulty } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(difficulty.rawValue.uppercased()).font(.system(size: 12, weight: .black, design: .monospaced))
-                                        Text(difficulty == .chill ? "Room to find your flow" : "Arrows. Hazards. Faster.").font(.caption2)
-                                    }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
-                                        .foregroundStyle(game.difficulty == difficulty ? .black : rushCream)
-                                        .background(game.difficulty == difficulty ? rushLime : .white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
-                                }.buttonStyle(.plain)
-                            }
-                        }
-                        Button {
-                            if game.inputReady { game.start(demo: motion.simulated) }
-                            else { showingSetup = true }
-                        } label: {
-                            HStack {
-                                Text(game.inputReady ? "LET'S PLAY" : "CONNECT YOUR CONTROLLER")
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
-                            }.font(.system(size: 14, weight: .black, design: .monospaced)).padding(18)
-                                .foregroundStyle(.black).background(rushLime, in: RoundedRectangle(cornerRadius: 12))
-                        }.buttonStyle(.plain)
-                        HStack {
-                            Button("How to play") { showHowTo.toggle() }.buttonStyle(.plain)
-                            Text("/").foregroundStyle(.secondary)
-                            Button("Watch demo") {
-                                motion.start(demo: true)
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { game.start(demo: true) }
+                    .buttonStyle(SportsButtonStyle())
+            }.padding(.horizontal, 34).padding(.vertical, 20).background(.white.opacity(0.96))
+            HStack(alignment: .top, spacing: 26) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("CHOOSE YOUR CHALLENGE", systemImage: "figure.fencing")
+                        .font(.system(size: 11, weight: .bold, design: .default)).tracking(2).foregroundStyle(rushLime)
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text("Neon").foregroundStyle(SportsTheme.ink)
+                        Text("Rush").foregroundStyle(rushLime).italic()
+                    }.font(.system(size: 50, weight: .bold, design: .default)).tracking(-3)
+                    Text("A little swing. A whole lot of play.")
+                        .font(.system(size: 18, weight: .medium, design: .default))
+                    Text("Slice the blocks. Dodge the red.\nFind your rhythm in a 60-second challenge.")
+                        .font(.system(size: 14, design: .default)).foregroundStyle(.secondary).lineSpacing(4)
+                    HStack(spacing: 32) {
+                        menuStat("60", "SECONDS")
+                        menuStat("3", "ROUNDS")
+                        menuStat("×4", "MAX COMBO")
+                    }.padding(.vertical, 7)
+                    Divider()
+                    Text("Pick your pace").font(.system(size: 15, weight: .semibold, design: .default))
+                    HStack(spacing: 10) {
+                        ForEach(RushDifficulty.allCases, id: \.self) { difficulty in
+                            Button { game.difficulty = difficulty } label: {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Image(systemName: difficulty == .chill ? "sun.max.fill" : "bolt.fill")
+                                        Text(difficulty.rawValue)
+                                        Spacer(minLength: 0)
+                                        if game.difficulty == difficulty { Image(systemName: "checkmark.circle.fill") }
+                                    }.font(.system(size: 15, weight: .bold, design: .default))
+                                    Text(difficulty == .chill ? "Find your flow" : "Turn up the challenge").font(.system(size: 11, design: .default))
+                                }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                                    .foregroundStyle(game.difficulty == difficulty ? .white : SportsTheme.ink)
+                                    .background(game.difficulty == difficulty ? rushLime : Color.white, in: RoundedRectangle(cornerRadius: 6))
+                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(rushLime.opacity(0.35), lineWidth: 1.5))
                             }.buttonStyle(.plain)
-                            Spacer()
-                            Text("BEST  \(game.bestScore.formatted())").font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(rushLime)
-                        }.font(.caption).foregroundStyle(.white.opacity(0.6))
-                    }.frame(width: min(430, geometry.size.width * 0.45)).padding(28)
-                        .background(.black.opacity(0.48), in: RoundedRectangle(cornerRadius: 22))
-                    Spacer(minLength: 30)
-                    VStack(alignment: .trailing) {
-                        HStack(spacing: 6) {
-                            Text(motion.simulated ? "SIMULATED CONTROLLER" : game.inputReady ? "YOUR SABER IS LIVE" : "YOUR AIRPODS. YOUR CONTROLLER.")
-                                .font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1)
-                            Image(systemName: "arrow.down.left")
-                        }.foregroundStyle(motion.simulated ? .orange : rushLime).padding(.top, 20)
-                        Spacer()
-                        if showHowTo { howToCard }
-                        else {
-                            VStack(alignment: .leading, spacing: 18) {
-                                rule("✦", "SLICE", "Neon blocks build your combo.", rushLime)
-                                rule("→", "FOLLOW", "Cyan arrows show the cut direction.", .cyan)
-                                rule("×", "AVOID", "Red hazards cost one energy.", .red)
-                            }.padding(22).background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 16))
-                                .frame(maxWidth: 335)
                         }
-                    }.padding(.vertical, 20)
-                }
-            }
-            HStack(spacing: 12) {
-                Label(game.inputReady ? "\(motion.controllerName) ready" : "Start AirPods in Controller setup", systemImage: game.inputReady ? "checkmark.circle.fill" : "circle")
-                Text("·")
-                Text("R to recenter")
+                    }
+                    Button {
+                        if game.inputReady { game.start(demo: motion.simulated) }
+                        else { showingSetup = true }
+                    } label: {
+                        HStack {
+                            Image(systemName: "play.circle.fill").font(.title2)
+                            Text(game.inputReady ? "Let’s play!" : "Connect your controller")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }.font(.system(size: 18, weight: .bold, design: .default)).padding(.vertical, 6)
+                    }.buttonStyle(SportsButtonStyle(primary: true))
+                    HStack {
+                        Button("How to play") { showHowTo.toggle() }
+                        Spacer()
+                        Button { motion.start(demo: true)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { game.start(demo: true) }
+                        } label: { Label("Watch demo", systemImage: "play.rectangle") }
+                    }.buttonStyle(.plain).font(.system(size: 13, weight: .medium, design: .default)).foregroundStyle(rushLime)
+                }.padding(24).frame(width: 430).sportsPanel()
+                VStack(alignment: .trailing, spacing: 16) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "trophy.fill").foregroundStyle(Color.orange)
+                        Text("Personal best")
+                        Text(game.bestScore.formatted()).fontWeight(.bold).foregroundStyle(rushLime)
+                    }.font(.system(size: 14, design: .default)).padding(14).sportsPanel()
+                    Spacer()
+                    if showHowTo { howToCard }
+                    else {
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Every swing counts.").font(.system(size: 20, weight: .bold, design: .default))
+                            rule("✦", "SLICE", "Green blocks build your combo.", SportsTheme.green)
+                            rule("→", "FOLLOW", "Blue arrows show the cut direction.", rushLime)
+                            rule("×", "AVOID", "Red hazards cost one energy.", .red)
+                        }.padding(22).frame(width: 300).sportsPanel()
+                    }
+                    Label(motion.simulated ? "Simulated controller" : game.inputReady ? "Your saber is live" : "Your AirPods. Your controller.", systemImage: "airpodspro")
+                        .font(.system(size: 12, weight: .medium, design: .default)).padding(12).sportsPanel()
+                }.frame(maxWidth: .infinity, alignment: .trailing)
+            }.padding(24)
+            Spacer(minLength: 0)
+            HStack(spacing: 14) {
+                Label(game.inputReady ? "\(motion.controllerName) ready" : "Connect AirPods to get started", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 Spacer()
-                Button("Scripted saber tests") { showingScripts = true }.buttonStyle(.plain)
-                Button("Open test lab") { motion.showLab(true) }.buttonStyle(.plain)
-                Text("LOCAL PLAY / V0.3").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.3))
-            }.font(.caption).foregroundStyle(.white.opacity(0.5)).padding(.top, 18)
-        }.padding(30)
+                Text("Ⓡ  Recenter").foregroundStyle(.secondary)
+                Button("Scripted saber tests") { showingScripts = true }.buttonStyle(SportsButtonStyle())
+                Button { motion.showLab(true) } label: { Label("Training & test lab", systemImage: "figure.fencing") }
+                    .buttonStyle(SportsButtonStyle())
+            }.font(.system(size: 13, weight: .medium, design: .default)).padding(.horizontal, 34).padding(.vertical, 16)
+                .background(.white.opacity(0.96))
+        }
     }
     private var howToCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("FIND YOUR FLOW").font(.system(size: 14, weight: .black, design: .monospaced)).foregroundStyle(rushLime)
+            Text("FIND YOUR FLOW").font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundStyle(rushLime)
             Text("1. Connect and calibrate in Controller setup.\n\n2. Wait for blocks to reach you, then sweep your blade through them.\n\n3. Cut in the arrow's direction. Keep your blade away from red × blocks.\n\n4. Five clean cuts increase your multiplier. A miss, wrong cut, or hazard breaks your combo.")
-                .font(.callout).foregroundStyle(.white.opacity(0.75))
+                .font(.callout).foregroundStyle(SportsTheme.ink.opacity(0.75))
             Button("Got it") { showHowTo = false }.buttonStyle(.bordered)
-        }.padding(24).frame(maxWidth: 360).background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 16))
+        }.padding(24).frame(maxWidth: 360).sportsPanel()
     }
     private var hud: some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("SCORE").font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(2).foregroundStyle(.secondary)
-                    Text(game.state.score.formatted()).font(.system(size: 39, weight: .black, design: .rounded)).monospacedDigit()
-                }.frame(width: 170, alignment: .leading)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("×\(game.state.multiplier)").font(.system(size: 27, weight: .black, design: .rounded)).foregroundStyle(rushLime)
-                    Text("\(game.state.combo) COMBO").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("SCORE").font(.system(size: 12, weight: .semibold)).tracking(1)
+                HStack(alignment: .firstTextBaseline, spacing: 18) {
+                    Text(game.state.score.formatted()).font(.system(size: 38, weight: .semibold)).monospacedDigit()
+                    Text("×\(game.state.multiplier)").font(.system(size: 24, weight: .bold)).foregroundStyle(Color(red: 0.55, green: 0.88, blue: 1))
                 }
-                Spacer()
-                VStack(spacing: 4) {
-                    Text(game.state.roundName).font(.system(size: 12, weight: .black, design: .monospaced)).tracking(3).foregroundStyle(rushLime)
-                    Text(String(format: "%d:%02d", Int(ceil(game.state.remaining)) / 60, Int(ceil(game.state.remaining)) % 60)).font(.system(size: 37, weight: .bold, design: .rounded)).monospacedDigit()
+                Text("\(game.state.combo) consecutive cuts").font(.system(size: 12))
+            }.frame(width: 205, alignment: .leading).scoreboard()
+            Spacer()
+            VStack(spacing: 4) {
+                Text(game.state.roundName).font(.system(size: 12, weight: .semibold)).tracking(1)
+                Text(String(format: "%d:%02d", Int(ceil(game.state.remaining)) / 60, Int(ceil(game.state.remaining)) % 60))
+                    .font(.system(size: 34, weight: .medium)).monospacedDigit()
+                ProgressView(value: game.state.remaining, total: 60).tint(.white).frame(width: 116)
+            }.scoreboard()
+            Spacer()
+            VStack(alignment: .trailing, spacing: 10) {
+                HStack(spacing: 20) {
+                    Text("ENERGY").font(.system(size: 12, weight: .semibold)).tracking(1)
+                    Button { game.pause() } label: { Image(systemName: "pause.fill").padding(5) }
+                        .buttonStyle(.plain).accessibilityLabel("Pause game")
                 }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 8) {
-                    Text("ENERGY").font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(2).foregroundStyle(.secondary)
-                    HStack(spacing: 5) {
-                        ForEach(0..<game.state.difficulty.lives, id: \.self) { i in
-                            RoundedRectangle(cornerRadius: 3).fill(i < game.state.lives ? rushLime : .white.opacity(0.1)).frame(width: 15, height: 21)
-                        }
+                HStack(spacing: 7) {
+                    ForEach(0..<game.state.difficulty.lives, id: \.self) { i in
+                        Circle().fill(i < game.state.lives ? Color(red: 0.56, green: 0.88, blue: 0.26) : .black.opacity(0.45))
+                            .overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1))
+                            .frame(width: 18, height: 18)
                     }
                 }
-                Button { game.pause() } label: { Image(systemName: "pause.fill").padding(10) }.buttonStyle(.bordered).padding(.leading, 14)
-            }
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.1))
-                    Capsule().fill(rushLime).frame(width: g.size.width * game.state.remaining / 60)
-                }
-            }.frame(height: 3)
-        }.padding(.horizontal, 28).padding(.vertical, 20)
-            .background(LinearGradient(colors: [.black.opacity(0.8), .black.opacity(0)], startPoint: .top, endPoint: .bottom))
+            }.scoreboard()
+        }.foregroundStyle(.white).padding(24)
             .allowsHitTesting(game.state.phase == .playing || game.state.phase == .countdown)
     }
     private var playFooter: some View {
-        HStack {
-            Text("NEON RUSH").font(.system(size: 12, weight: .black, design: .rounded)).italic().tracking(1)
-            if game.isDemo { Text(motion.scriptedScenario == nil ? "DEMO · NO HIGH SCORE" : "SCRIPTED · NO HIGH SCORE").foregroundStyle(.orange).font(.system(size: 10, weight: .bold, design: .monospaced)) }
+        HStack(spacing: 16) {
+            Text("Neon Rush").font(.system(size: 17, weight: .semibold)).italic()
+            if game.isDemo { Text(motion.scriptedScenario == nil ? "DEMO · NO HIGH SCORE" : "SCRIPTED · NO HIGH SCORE").font(.system(size: 11, weight: .bold)).foregroundStyle(.yellow) }
             Spacer()
             if let script = motion.scriptedScenario {
-                Button("Change test") { showingScripts = true }.font(.caption).buttonStyle(.bordered)
-                    .help(script.rawValue)
+                Button("Change test") { showingScripts = true }.buttonStyle(.bordered).help(script.rawValue)
             }
             ControllerIdentityBadge(motion: motion)
-            Text("R  RECENTER     SPACE  PAUSE").font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
-            Button { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }.buttonStyle(.plain)
-        }.padding(24).background(LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom))
+            Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
+            Button { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }
+                .buttonStyle(.plain).accessibilityLabel(game.sound ? "Mute sound" : "Enable sound")
+        }.foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 2, y: 1)
+            .padding(24).background(LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom))
     }
     private var countdown: some View {
         VStack(spacing: 10) {
-            Text("GET INTO POSITION").font(.system(size: 12, weight: .bold, design: .monospaced)).tracking(3)
-            Text("\(max(1, Int(ceil(game.state.countdown))))").font(.system(size: 130, weight: .black, design: .rounded)).italic().foregroundStyle(rushLime)
-            Text("Sweep through neon. Avoid red.").foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black.opacity(0.25)).allowsHitTesting(false)
+            Text("GET INTO POSITION").font(.system(size: 14, weight: .semibold)).tracking(2).foregroundStyle(.white)
+            Text("\(max(1, Int(ceil(game.state.countdown))))").font(.system(size: 130, weight: .bold, design: .default)).italic().foregroundStyle(rushLime)
+            Text("Sweep through the blocks. Avoid red.").foregroundStyle(.white)
+        }.shadow(color: .black.opacity(0.6), radius: 2, y: 1).frame(maxWidth: .infinity, maxHeight: .infinity).background(.black.opacity(0.25)).allowsHitTesting(false)
     }
     private var pauseCard: some View {
         overlayCard {
-            Text("TAKE A BREATH.").font(.system(size: 42, weight: .black, design: .rounded)).italic()
+            Text("Taking a break?").font(.system(size: 42, weight: .bold, design: .default)).italic()
             Text(game.pauseReason).foregroundStyle(.secondary).multilineTextAlignment(.center)
             Label(game.inputReady ? "\(motion.controllerName) ready" : "Waiting for \(motion.controllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 .foregroundStyle(game.inputReady ? rushLime : .orange).font(.callout)
-            actionButton("BACK TO THE RUSH") { game.resume() }.disabled(!game.inputReady)
+            actionButton("Back to the game") { game.resume() }.disabled(!game.inputReady)
             HStack(spacing: 22) {
                 Button("Controller setup") { showingSetup = true }
                 Button("Scripted test") { showingScripts = true }
@@ -225,11 +230,11 @@ struct NeonRushView: View {
     }
     private var results: some View {
         overlayCard {
-            Text(game.state.completed ? "RUN COMPLETE" : "OUT OF ENERGY").font(.system(size: 11, weight: .black, design: .monospaced)).tracking(3).foregroundStyle(rushLime)
+            Text(game.state.completed ? "RUN COMPLETE" : "OUT OF ENERGY").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(3).foregroundStyle(rushLime)
             HStack(alignment: .center, spacing: 28) {
-                Text(game.state.completed ? game.state.rank : "↻").font(.system(size: 90, weight: .black, design: .rounded)).italic().foregroundStyle(rushLime)
+                Text(game.state.completed ? game.state.rank : "↻").font(.system(size: 90, weight: .bold, design: .default)).italic().foregroundStyle(rushLime)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(game.state.score.formatted()).font(.system(size: 54, weight: .black, design: .rounded)).monospacedDigit()
+                    Text(game.state.score.formatted()).font(.system(size: 54, weight: .bold, design: .default)).monospacedDigit()
                     Text(game.newRecord ? "NEW PERSONAL BEST" : game.isDemo ? (motion.scriptedScenario == nil ? "DEMO RUN · SCORE NOT SAVED" : "SCRIPTED RUN · SCORE NOT SAVED") : "\(game.state.difficulty.rawValue.uppercased()) · BEST \(game.bestScore.formatted())")
                         .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(game.newRecord ? rushLime : .secondary)
                 }
@@ -241,7 +246,7 @@ struct NeonRushView: View {
             }.padding(.vertical, 6)
             Text(game.state.completed ? "You found your flow. Can you beat it?" : "Keep your cuts deliberate. The next run is yours.")
                 .font(.callout).foregroundStyle(.secondary)
-            actionButton("ONE MORE RUN") { game.start(demo: motion.simulated) }.disabled(!game.inputReady)
+            actionButton("Play again") { game.start(demo: motion.simulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
                 Button("Back to Aircade") { game.leave() }
                 if motion.scriptedScenario != nil { Button("Change scripted test") { showingScripts = true } }
@@ -251,26 +256,26 @@ struct NeonRushView: View {
     }
     private func overlayCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ZStack {
-            Color.black.opacity(0.65)
+            SportsTheme.blue.opacity(0.22)
             VStack(spacing: 22, content: content).padding(38).frame(width: 600)
-                .background(Color(red: 0.055, green: 0.065, blue: 0.075), in: RoundedRectangle(cornerRadius: 24))
-                .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1)))
+                .sportsPanel()
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(rushLime.opacity(0.15)))
         }
     }
     private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack { Text(title); Spacer(); Image(systemName: "arrow.right") }
-                .font(.system(size: 13, weight: .black, design: .monospaced)).padding(18)
-                .foregroundStyle(.black).background(rushLime, in: RoundedRectangle(cornerRadius: 12))
+                .font(.system(size: 13, weight: .bold, design: .monospaced)).padding(18)
+                .foregroundStyle(.white).background(rushLime, in: RoundedRectangle(cornerRadius: 6))
         }.buttonStyle(.plain)
     }
-    private var brand: some View { Text("aircade").font(.system(size: 26, weight: .black, design: .rounded)).tracking(-1).padding(.trailing, 12) }
+    private var brand: some View { Text("aircade").foregroundStyle(SportsTheme.blue).font(.system(size: 34, weight: .medium, design: .default)).tracking(-1).padding(.trailing, 12) }
     private var connectionPill: some View {
         ControllerIdentityBadge(motion: motion)
     }
     private func menuStat(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(value).font(.system(size: 24, weight: .black, design: .rounded)).monospacedDigit()
+            Text(value).font(.system(size: 24, weight: .bold, design: .default)).monospacedDigit()
             Text(label).font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(1).foregroundStyle(.secondary)
         }
     }
@@ -279,7 +284,7 @@ struct NeonRushView: View {
             Text(symbol).font(.system(size: 26, weight: .bold)).frame(width: 43, height: 43)
                 .foregroundStyle(color).background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 11, weight: .black, design: .monospaced)).tracking(1)
+                Text(title).font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -303,7 +308,7 @@ private struct ControllerSetupContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack {
-                Text("YOUR CONTROLLER").font(.system(size: 22, weight: .black, design: .rounded))
+                Text("YOUR CONTROLLER").font(.system(size: 22, weight: .bold, design: .default))
                 Spacer(); Button("Done", action: done).keyboardShortcut(.cancelAction)
             }
             ScrollView {
@@ -360,13 +365,13 @@ private struct ControllerSetupContent: View {
                     Button("Open test lab & diagnostics") { done(); motion.showLab(true) }.buttonStyle(.plain).foregroundStyle(rushLime)
                 }
             }
-        }.padding(26).frame(width: 610, height: 690).background(Color(red: 0.04, green: 0.05, blue: 0.065)).preferredColorScheme(.dark)
+        }.padding(26).frame(width: 610, height: 690).background(SportsTheme.paper).preferredColorScheme(.light).tint(rushLime)
     }
     private func setupStep<Content: View>(_ number: String, _ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack { Text(number).foregroundStyle(rushLime).font(.system(size: 12, weight: .bold, design: .monospaced)); Text(title).font(.headline) }
             content()
-        }.padding(17).frame(maxWidth: .infinity, alignment: .leading).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 13))
+        }.padding(17).frame(maxWidth: .infinity, alignment: .leading).sportsPanel()
     }
 }
 

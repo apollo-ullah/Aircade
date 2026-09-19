@@ -21,12 +21,12 @@ final class SaberScene {
     enum ImpactKind { case cut, glance, parry, damage }
 
     init() {
-        scene.background.contents = NSColor(calibratedRed: 0.025, green: 0.035, blue: 0.075, alpha: 1)
+        scene.background.contents = Self.skyTexture()
         let camera = SCNNode()
         camera.camera = SCNCamera()
         camera.camera?.fieldOfView = 48
-        camera.camera?.wantsHDR = true
-        camera.camera?.bloomIntensity = 1.3
+        camera.camera?.wantsHDR = false
+        camera.camera?.bloomIntensity = 0.12
         camera.camera?.bloomThreshold = 0.6
         camera.position = SCNVector3(0, 1.3, 6.3)
         camera.look(at: SCNVector3(0, 0.7, 0))
@@ -34,37 +34,27 @@ final class SaberScene {
 
         let ambient = SCNNode()
         ambient.light = SCNLight(); ambient.light?.type = .ambient
-        ambient.light?.intensity = 550
-        ambient.light?.color = NSColor(calibratedRed: 0.3, green: 0.4, blue: 0.7, alpha: 1)
+        ambient.light?.intensity = 650
+        ambient.light?.color = NSColor(calibratedWhite: 0.95, alpha: 1)
         scene.rootNode.addChildNode(ambient)
         let key = SCNNode()
-        key.light = SCNLight(); key.light?.type = .omni; key.light?.intensity = 1300
-        key.position = SCNVector3(2, 3, 4)
+        key.light = SCNLight(); key.light?.type = .directional; key.light?.intensity = 850
+        key.eulerAngles = SCNVector3(-0.8, -0.5, 0)
         scene.rootNode.addChildNode(key)
 
         let floor = SCNFloor()
-        floor.reflectivity = 0.12
-        floor.firstMaterial?.diffuse.contents = NSColor(calibratedWhite: 0.045, alpha: 1)
+        floor.reflectivity = 0
+        floor.firstMaterial?.diffuse.contents = Self.turfTexture()
+        floor.firstMaterial?.diffuse.wrapS = .repeat
+        floor.firstMaterial?.diffuse.wrapT = .repeat
+        floor.firstMaterial?.diffuse.contentsTransform = SCNMatrix4MakeScale(14, 14, 1)
         let floorNode = SCNNode(geometry: floor)
         floorNode.position.y = -1.65
         scene.rootNode.addChildNode(floorNode)
-        for i in -6...6 {
-            let material = SCNMaterial()
-            material.diffuse.contents = NSColor(calibratedRed: 0.08, green: 0.18, blue: 0.25, alpha: 1)
-            for axis in 0...1 {
-                let geometry = SCNBox(width: axis == 0 ? 12 : 0.008, height: 0.008,
-                                      length: axis == 0 ? 0.008 : 12, chamferRadius: 0)
-                geometry.materials = [material]
-                let node = SCNNode(geometry: geometry)
-                node.position = SCNVector3(axis == 0 ? 0 : Float(i), -1.64, axis == 0 ? Float(i) : 0)
-                scene.rootNode.addChildNode(node)
-            }
-        }
-
         scene.rootNode.addChildNode(pivot)
         let handle = SCNCylinder(radius: 0.11, height: 0.62)
-        handle.firstMaterial?.diffuse.contents = NSColor(calibratedWhite: 0.24, alpha: 1)
-        handle.firstMaterial?.metalness.contents = 0.8
+        handle.firstMaterial?.diffuse.contents = NSColor(calibratedWhite: 0.92, alpha: 1)
+        handle.firstMaterial?.metalness.contents = 0.1
         handle.firstMaterial?.roughness.contents = 0.3
         let handleNode = SCNNode(geometry: handle)
         handleNode.position.y = -0.3
@@ -210,21 +200,109 @@ final class SaberScene {
             hideAttack()
         }
     }
-    private func buildArcadeEnvironment() {
-        for index in 0..<9 {
-            let z = -Float(index) * 2 - 1.5
-            let color = index % 2 == 0 ? NSColor(calibratedRed: 0.13, green: 0.47, blue: 0.41, alpha: 1) : NSColor(calibratedRed: 0.28, green: 0.15, blue: 0.48, alpha: 1)
-            for side: Float in [-1, 1] {
-                let rail = lineNode(from: SIMD3<Float>(side * 3.1, -1.6, z), to: SIMD3<Float>(side * 3.1, 3.6, z), radius: 0.012, color: color)
-                arcadeEnvironment.addChildNode(rail)
+    private static func turfTexture() -> NSImage {
+        let size = 256
+        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
+                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                      isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: size * 4, bitsPerPixel: 32)!
+        var seed: UInt32 = 91
+        for y in 0..<size {
+            for x in 0..<size {
+                seed = seed &* 1664525 &+ 1013904223
+                let noise = Int((seed >> 24) % 36)
+                let index = (y * size + x) * 4
+                bitmap.bitmapData![index] = UInt8(67 + noise)
+                bitmap.bitmapData![index + 1] = UInt8(111 + noise)
+                bitmap.bitmapData![index + 2] = UInt8(30 + noise / 2)
+                bitmap.bitmapData![index + 3] = 255
             }
-            let top = lineNode(from: SIMD3<Float>(-3.1, 3.6, z), to: SIMD3<Float>(3.1, 3.6, z), radius: 0.012, color: color)
-            arcadeEnvironment.addChildNode(top)
         }
-        for x: Float in [-0.95, 0, 0.95] {
-            let line = lineNode(from: SIMD3<Float>(x, -1.62, -18), to: SIMD3<Float>(x, -1.62, 1), radius: 0.014, color: NSColor(calibratedRed: 0.35, green: 0.75, blue: 0.3, alpha: 1))
-            arcadeEnvironment.addChildNode(line)
+        let image = NSImage(size: NSSize(width: size, height: size))
+        image.addRepresentation(bitmap)
+        return image
+    }
+    private static func skyTexture() -> NSImage {
+        let image = NSImage(size: NSSize(width: 1024, height: 512))
+        image.lockFocus()
+        NSGradient(starting: NSColor(calibratedRed: 0.79, green: 0.9, blue: 0.94, alpha: 1),
+                   ending: NSColor(calibratedRed: 0.30, green: 0.66, blue: 0.88, alpha: 1))!
+            .draw(in: NSRect(x: 0, y: 0, width: 1024, height: 512), angle: 90)
+        // Soft, irregular cloud banks painted into the sky, rather than solid 3D ovals.
+        for bank in 0..<5 {
+            for puff in 0..<18 {
+                let x = CGFloat(bank * 245 + puff * 13 - 65)
+                let y = CGFloat(250 + (bank % 3) * 55 + Int(sin(Double(puff) * 0.8) * 12))
+                NSColor.white.withAlphaComponent(0.045).setFill()
+                NSBezierPath(ovalIn: NSRect(x: x, y: y, width: 95, height: CGFloat(16 + puff % 4 * 5))).fill()
+            }
         }
+        image.unlockFocus()
+        return image
+    }
+    private func buildArcadeEnvironment() {
+        // Scenery never participates in hit testing or game-state updates.
+        func box(_ w: CGFloat, _ h: CGFloat, _ d: CGFloat, _ p: SCNVector3, _ color: NSColor) {
+            let geometry = SCNBox(width: w, height: h, length: d, chamferRadius: 0)
+            geometry.firstMaterial?.diffuse.contents = color
+            let node = SCNNode(geometry: geometry); node.position = p
+            arcadeEnvironment.addChildNode(node)
+        }
+        let turf = Self.turfTexture()
+        for i in 0..<8 {
+            let surface = SCNBox(width: 8, height: 0.012, length: 4, chamferRadius: 0)
+            surface.firstMaterial?.diffuse.contents = turf
+            surface.firstMaterial?.multiply.contents = NSColor(calibratedWhite: i % 2 == 0 ? 1 : 0.90, alpha: 1)
+            let node = SCNNode(geometry: surface)
+            node.position = SCNVector3(0, -1.63, -Float(i) * 4)
+            arcadeEnvironment.addChildNode(node)
+        }
+        for x: Float in [-4, 4] {
+            box(0.045, 0.018, 30, SCNVector3(x, -1.6, -12), .white)
+            box(0.12, 0.6, 31, SCNVector3(x * 1.22, -1.35, -12), NSColor(calibratedRed: 0.13, green: 0.38, blue: 0.29, alpha: 1))
+        }
+        for z: Float in [1.5, -12, -26] { box(8, 0.018, 0.045, SCNVector3(0, -1.6, z), .white) }
+        for side: Float in [-1, 1] {
+            for row in 0..<3 {
+                box(1.1, 0.3, 29, SCNVector3(side * (6 + Float(row) * 1.1), -1.35 + Float(row) * 0.38, -13), NSColor(calibratedRed: 0.69, green: 0.74, blue: 0.69, alpha: 1))
+                for seat in 0..<22 {
+                    let x = side * (6 + Float(row) * 1.1)
+                    let y = -1.05 + Float(row) * 0.38
+                    let z = -Float(seat) * 1.25
+                    let shirt = NSColor(calibratedHue: CGFloat((seat * 7 + row * 3) % 20) / 20, saturation: 0.48, brightness: 0.80, alpha: 1)
+                    box(0.25, 0.35, 0.24, SCNVector3(x, y + 0.17, z), shirt)
+                    let head = SCNNode(geometry: SCNSphere(radius: 0.12))
+                    head.geometry?.firstMaterial?.diffuse.contents = NSColor(calibratedRed: 0.73, green: 0.52, blue: 0.35, alpha: 1)
+                    head.position = SCNVector3(x, y + 0.45, z)
+                    arcadeEnvironment.addChildNode(head)
+                }
+            }
+            for i in 0..<15 {
+                let z = -Float(i) * 3.7 + 1
+                let x = side * (12 + Float(i % 3))
+                let height = CGFloat(2.5 + Double(i % 4) * 0.4)
+                let trunk = SCNNode(geometry: SCNCylinder(radius: 0.10, height: height))
+                trunk.geometry?.firstMaterial?.diffuse.contents = NSColor(calibratedRed: 0.38, green: 0.29, blue: 0.18, alpha: 1)
+                trunk.position = SCNVector3(x, Float(height / 2) - 1.65, z)
+                arcadeEnvironment.addChildNode(trunk)
+                for tier in 0..<3 {
+                    let foliage = SCNCone(topRadius: 0.12, bottomRadius: CGFloat(1.15 - Double(tier) * 0.23), height: 1.8)
+                    foliage.radialSegmentCount = 9
+                    foliage.firstMaterial?.diffuse.contents = NSColor(calibratedRed: 0.22 + Double(i % 3) * 0.025, green: 0.39 + Double(tier) * 0.06, blue: 0.13, alpha: 1)
+                    let crown = SCNNode(geometry: foliage)
+                    crown.position = SCNVector3(x + Float(tier % 2) * 0.14, Float(height) - 1.3 + Float(tier) * 0.65, z)
+                    crown.eulerAngles.y = CGFloat(i + tier) * 0.7
+                    arcadeEnvironment.addChildNode(crown)
+                }
+            }
+        }
+        box(22, 1.7, 0.35, SCNVector3(0, -0.8, -30), NSColor(calibratedRed: 0.12, green: 0.43, blue: 0.33, alpha: 1))
+        let sign = SCNText(string: "Aircade Sports", extrusionDepth: 0.005)
+        sign.font = .systemFont(ofSize: 0.65, weight: .medium)
+        sign.firstMaterial?.diffuse.contents = NSColor.white
+        let node = SCNNode(geometry: sign)
+        let bounds = node.boundingBox
+        node.position = SCNVector3(-(bounds.max.x + bounds.min.x) / 2, -0.85, -29.8)
+        arcadeEnvironment.addChildNode(node)
     }
     func clearRush() {
         rushRoot.childNodes.forEach { $0.removeFromParentNode() }
@@ -251,27 +329,27 @@ final class SaberScene {
     }
     private func makeRushTarget(_ target: RushTarget) -> SCNNode {
         let parent = SCNNode()
-        let color: NSColor = target.hazard ? .systemRed : target.direction == .any ? NSColor(calibratedRed: 0.65, green: 1, blue: 0.22, alpha: 1) : .cyan
-        let box = SCNBox(width: 0.62, height: 0.62, length: 0.62, chamferRadius: target.hazard ? 0.015 : 0.07)
-        box.firstMaterial?.diffuse.contents = color.blended(withFraction: 0.65, of: .black)
+        let color: NSColor = target.hazard ? .systemRed : target.direction == .any ? NSColor(calibratedRed: 0.22, green: 0.65, blue: 0.13, alpha: 1) : NSColor(calibratedRed: 0.02, green: 0.49, blue: 0.77, alpha: 1)
+        let box = SCNBox(width: 0.62, height: 0.62, length: 0.62, chamferRadius: 0.015)
+        box.firstMaterial?.diffuse.contents = color
         box.firstMaterial?.emission.contents = color.blended(withFraction: 0.88, of: .black)
-        box.firstMaterial?.metalness.contents = 0.5
+        box.firstMaterial?.metalness.contents = 0.05
         parent.addChildNode(SCNNode(geometry: box))
-        let frame = SCNBox(width: 0.58, height: 0.58, length: 0.018, chamferRadius: 0.06)
+        let frame = SCNBox(width: 0.58, height: 0.58, length: 0.018, chamferRadius: 0.012)
         frame.firstMaterial?.diffuse.contents = color
         frame.firstMaterial?.emission.contents = color
         let face = SCNNode(geometry: frame)
         face.position.z = 0.315
         parent.addChildNode(face)
-        let inset = SCNNode(geometry: SCNBox(width: 0.52, height: 0.52, length: 0.018, chamferRadius: 0.04))
-        inset.geometry?.firstMaterial?.diffuse.contents = NSColor(calibratedWhite: 0.025, alpha: 1)
+        let inset = SCNNode(geometry: SCNBox(width: 0.52, height: 0.52, length: 0.018, chamferRadius: 0.008))
+        inset.geometry?.firstMaterial?.diffuse.contents = NSColor(calibratedWhite: 0.97, alpha: 1)
         inset.position.z = 0.33; parent.addChildNode(inset)
         let symbol = target.hazard ? "×" : target.direction == .left ? "←" : target.direction == .right ? "→" : target.direction == .down ? "↓" : "✦"
         let geometry = SCNText(string: symbol, extrusionDepth: 0.005)
         geometry.font = .systemFont(ofSize: 0.38, weight: .bold)
         geometry.flatness = 0.1
         geometry.firstMaterial?.diffuse.contents = color
-        geometry.firstMaterial?.emission.contents = color
+        geometry.firstMaterial?.emission.contents = NSColor.black
         let glyph = SCNNode(geometry: geometry)
         let bounds = glyph.boundingBox
         glyph.position = SCNVector3(-Double(bounds.max.x + bounds.min.x) / 2, -Double(bounds.max.y + bounds.min.y) / 2, 0.35)
