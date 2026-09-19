@@ -127,3 +127,27 @@ Separated collision freshness from confirmed tracking loss. At 250 ms the game h
 - Release build, ad-hoc signature verification, and diff checks passed. Closed the previous app normally and reopened with `--live-test`. The rebuilt process received **152 real Right-AirPod samples**, a **25 ms** sample age, and a calibrated ready state; it was on the menu awaiting a physical gameplay trial. Saved grip data was retained.
 - Subsequent **live gameplay** in `airpods-2026-09-19T15-00-21Z-5781A5.csv` verified the repaired path: target 1 scored, `RUSH_INPUT_WAIT age=0.2531` was followed by `RUSH_INPUT_RECOVERED gap=0.3199`, and targets 2, 4, 5, 6, 7, and 10 subsequently scored. There was no `RUSH_PAUSE` in this observed sequence. This is real Right-AirPod input with sound enabled, not a scripted run.
 - These are deterministic regressions of the real input-processing path. They establish handling of the observed timing; they do not independently establish why Bluetooth/Core Motion briefly stopped producing packets or guarantee the next physical trial's outcome.
+
+
+## Integrated arcade release candidate — September 19
+
+Source: `codex/arcade-integration` in `../Aircade-integration`. See `docs/INTEGRATION-EXECUTION.md` for agent ownership and commits. The original working checkout and fallback app were preserved. The UI handoff was merged at `5e6027a`; only implemented channels are public.
+
+**162 automated tests pass**: 79 MotionCore, 3 ControllerLink, 80 app-model tests. This includes the original simple calibration suite, phone-only production gameplay, real loopback TCP pairing/role updates, session continuity across games, collision timestamp regression, finite racket-face/ball sweeps, complete 30/60 Hz Tennis rounds, guest/local/profile result eligibility, permanent simulation disqualification, and stale-input recovery. Haptic events follow the selected device after reassignment or reconnection without reattributing the score; obsolete feedback UUIDs cannot affect the resumed session. Log: `/tmp/aircade-final-tests.log`.
+
+Native rendered checks (all synthetic inputs; no physical performance claim):
+
+| Check | Outcome | Evidence under `build/` |
+| --- | --- | --- |
+| Wii shell | 13 route transitions pass, pairing code persists, only current game enabled, script setup and exit work | `release-shell/shell-smoke-result.json` and screenshots |
+| Tennis | 60 seconds, 24 returns, 0 misses, 10,040 points, results; zero queued scores | `release-tennis/tennis-smoke-result.json` |
+| Neon Rush win | 60 seconds, 43 perfect cuts, 21,300 points, 5 lives; high score unchanged | `release-win/scripted-win-result.json` |
+| Neon Rush defeat | Five misses, zero lives, correct defeat; no pause modal; high score unchanged | `release-defeat/scripted-repro-result.json` |
+| Saber Duel | Blue wins, health [5, 0], results | `release-duel/duel-smoke-result.txt` |
+| Final-build stop/reconnect/resume | Tracking loss held game time; after resume, 13 cuts, 2,200 points, results; high score unchanged | `release-recovery/game-smoke-result.txt` |
+
+Sound/effects were enabled for the Neon Rush win/defeat checks. The win's maximum feedback callback was 0.59 ms and maximum frame was 98.1 ms, with no frame over the game's slow-frame threshold. These figures measure this scripted software run, not Bluetooth delay or motion-to-photon latency. Native UI snapshots were inspected for home, controller setup, Tennis, Duel, profile, settings and results; SceneKit scene snapshots separately cover the Metal-rendered content omitted by bitmap view capture. A light-theme contrast issue in the earbud identity card was corrected.
+
+The Mac release and signed generic iPhone device builds succeed; both signatures verify. The current iPhone companion must be installed to support role/feedback protocol changes. `devicectl` reports the previously trusted phone unavailable, so no updated installation or physical multi-game play-through is claimed. The old hardware success reported by the user remains evidence only for the previous build. Reconnect/unlock the iPhone to install `build/iOS/Build/Products/Debug-iphoneos/AircadeController.app`, then follow the acceptance sequence in the execution record.
+
+Guest play does not contact the badge service. MongoDB-backed integration was not exercised against a running database; isolated profile policy/transport tests do pass. The opponent remains deterministic, not trained/model-backed. Avatars, additional phones, external haptic motors, and physical grip/lag tuning remain deferred. The full plan's physical release gate is still open.

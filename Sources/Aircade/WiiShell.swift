@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import simd
 
 /// Root container. Owns navigation, the bottom bar, and the cursor overlay.
@@ -158,6 +159,11 @@ struct WiiShell: View {
     private var statusText: String {
         if route == .home && pointer.source == .motion { return "\(motion.controllers.name(for: motion.controllers.menuDevice)) pointing · flick to select" }
         if route == .home { return "Mouse control · connect an AirPod or iPhone to point" }
+        if route == .lab { return motion.controllers.readiness(for: .airPod) }
+        if route == .duel {
+            if motion.multiplayer.scripted { return "Scripted duel · simulated controllers" }
+            return "Blue: \(motion.multiplayer.name(.one)) · Orange: \(motion.multiplayer.name(.two))"
+        }
         return motion.controllers.readiness(for: motion.controllers.soloDevice)
     }
 }

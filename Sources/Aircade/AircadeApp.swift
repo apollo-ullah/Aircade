@@ -104,7 +104,7 @@ struct AircadeApp: App {
                     motion.shutdownControllerSession(); motion.stop(); motion.camera.stop()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                    if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") && !CommandLine.arguments.contains("--tennis-smoke") && !CommandLine.arguments.contains("--shell-smoke") {
+                    if !CommandLine.arguments.contains("--game-smoke-test") && !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") && !CommandLine.arguments.contains("--tennis-smoke") && !CommandLine.arguments.contains("--shell-smoke") {
                         motion.game.pause("Paused while Aircade was in the background.")
                         motion.tennis.pause("Paused while Aircade was in the background.")
                         if motion.showingMultiplayer { motion.multiplayer.pause("Paused while Aircade was in the background.") }
