@@ -13,10 +13,12 @@ struct TennisView: View {
     var body: some View {
         ZStack {
             SaberView(controller: motion.scene).ignoresSafeArea()
-            if game.state.phase == .playing || game.state.phase == .countdown {
+            if !game.challengeSelected && (game.state.phase == .playing || game.state.phase == .countdown) {
                 directOpponentSurface
             }
-            if game.state.phase == .menu { menu }
+            if game.challengeSelected {
+                AIChallengeView(motion: motion, tennis: game, game: game.challenge, players: players, setup: { showingSetup = true })
+            } else if game.state.phase == .menu { menu }
             else {
                 VStack(spacing: 0) {
                     hud
@@ -114,6 +116,12 @@ struct TennisView: View {
                     if let standing = players.standings["Tennis"] {
                         Text(standing.challenge).font(.callout).padding(16).frame(width: 300, alignment: .leading).wiiPanel()
                     }
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("ASTRA · SCREEN CONTROL", systemImage: "eye").font(.caption.bold())
+                        Text("Can you beat Astra?").font(.title2.bold())
+                        Text("It watches the court and operates its racket. Experimental: 8-second flights.").font(.callout).foregroundStyle(.secondary)
+                        MotionButton("Challenge Astra") { game.challengeSelected = true; game.challenge.connect() }.buttonStyle(WiiButtonStyle(primary: true))
+                    }.padding(20).frame(width: 300).wiiPanel()
                     Spacer()
                     VStack(alignment: .leading, spacing: 12) {
                         Text("MODEL OPPONENT").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(courtBlue)

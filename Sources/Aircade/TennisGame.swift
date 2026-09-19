@@ -9,6 +9,9 @@ enum AircadeSport: String, CaseIterable {
 }
 
 final class TennisGame: ObservableObject {
+    @Published var challengeSelected = false
+    let challenge: AIChallengeGame
+    var displayPhase: TennisPhase { challengeSelected ? challenge.match.phase : state.phase }
     @Published private(set) var state = TennisMatch()
     @Published var codexPractice = true
     @Published var enabled = false
@@ -54,6 +57,7 @@ final class TennisGame: ObservableObject {
     init(scene: SaberScene, opponent: any TennisOpponentStrategy = BasetenTennisOpponent(), automaticTimer: Bool = true,
          clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }, scoreDefaults: UserDefaults = .standard) {
         self.scene = scene
+        self.challenge = AIChallengeGame(scene: scene)
         self.opponent = opponent
         self.modelOpponent = opponent as? BasetenTennisOpponent
         self.clock = clock
@@ -96,6 +100,10 @@ final class TennisGame: ObservableObject {
     }
 
     func pause(_ reason: String = "Take a breath.") {
+        if challengeSelected {
+            if challenge.manual && reason == "Paused while Aircade was in the background." { return }
+            challenge.pause(reason); return
+        }
         guard state.phase == .playing || state.phase == .countdown else { return }
         pauseReason = reason
         state.pause()
@@ -106,6 +114,7 @@ final class TennisGame: ObservableObject {
     }
 
     func resume() {
+        if challengeSelected { if liveReady { challenge.resume() }; return }
         guard state.phase == .paused, liveReady else { return }
         state.resume()
         lastTick = now
@@ -117,6 +126,7 @@ final class TennisGame: ObservableObject {
     }
 
     func leave() {
+        challenge.disconnect(); challengeSelected = false
         if !resultSaved, runID != nil { onRunAbandoned?(runID) }
         runID = nil
         state.quit()
@@ -129,6 +139,7 @@ final class TennisGame: ObservableObject {
     }
 
     func observeSimulatedInput(_ simulated: Bool) {
+        if challengeSelected && simulated { challenge.simulated = true }
         if simulated && (state.phase == .playing || state.phase == .countdown || state.phase == .paused) {
             isDemo = true
         }
@@ -148,6 +159,10 @@ final class TennisGame: ObservableObject {
         previousPose = nil
         previousBall = nil
         previousTime = nil
+        if challengeSelected {
+            if now - lastInput >= ArcadeGame.trackingLossDelay { challenge.pause("Controller disconnected. Reconnect, then resume.") }
+            return
+        }
         guard state.phase == .playing || state.phase == .countdown else { return }
         let age = now - lastInput
         if age >= ArcadeGame.trackingLossDelay {
@@ -164,6 +179,7 @@ final class TennisGame: ObservableObject {
         guard time.isFinite, time >= lastInput else { return }
         inputReady = true
         lastInput = time
+        if challengeSelected { challenge.input(pose: pose, time: time); return }
         guard state.phase == .playing else { previousPose = nil; previousTime = nil; previousBall = nil; return }
         if let previousTime, time <= previousTime { return }
         defer {
@@ -188,6 +204,10 @@ final class TennisGame: ObservableObject {
         let time = now
         let delta = time - lastTick
         lastTick = time
+        if challengeSelected {
+            challenge.tick(delta: max(0, min(delta, 0.1)), now: time, inputReady: liveReady)
+            return
+        }
         if feedbackUntil < time { feedback = "" }
         guard state.phase == .playing || state.phase == .countdown else { return }
         guard liveReady else { waitForFreshInput(); return }

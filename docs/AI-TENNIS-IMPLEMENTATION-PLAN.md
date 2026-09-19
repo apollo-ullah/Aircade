@@ -1,8 +1,10 @@
 # Aircade: AI Tennis implementation plan
 
-Status: Phase 0 passed three live Astra screenshot/action/screenshot trials on `codex/astra-phase-zero`. Phases 1–6 remain planned. Prepared September 19, 2026 against the published `f7d6af2` release. Estimates below are timeboxes for a hackathon implementation, not delivery guarantees.
+Status: Phase 0 passed three live Astra screenshot/action/screenshot trials on `codex/astra-phase-zero`. Phases 1–3 are implemented, with live model rehearsal passing; physical-controller acceptance remains pending. Phases 4–6 remain planned. Prepared September 19, 2026 against the published `f7d6af2` release. Estimates below are timeboxes for a hackathon implementation, not delivery guarantees.
 
 Phase 0 evidence: seven automated checks and three scripted target trials pass. Separately, the live API run on September 19 at 22:19 UTC passed all three trials using nine requests to `gpt-6-astra`. Median completed-request latency was 3,100 ms; screenshot-to-action latencies were 3,427 / 3,345 / 2,256 ms. Each fresh trial also incurred a preliminary screenshot request, so these action measurements exclude session startup and final confirmation. See `docs/ASTRA-PHASE-ZERO-RESULTS.md`. Normal-speed live tennis remains unproven; begin Phase 1 with manual controls and use the measured latency to choose an explicitly labelled experimental speed in Phase 2.
+
+Implementation evidence: `docs/ASTRA-PHASE123-RESULTS.md`. The challenge uses an isolated local sidecar rather than adding screenshot routes to the existing badge/leaderboard server. This keeps model traffic and credentials independent of the working station. The sidecar and existing GLM rival are separate integrations.
 
 ## Product outcome
 

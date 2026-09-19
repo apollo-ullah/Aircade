@@ -27,7 +27,7 @@ struct WiiShell: View {
         if !flags.isDisjoint(with: ["--smoke-test", "--simple-calibration",
                                     "--live-test"]) { return .lab }
         if !flags.isDisjoint(with: ["--multiplayer", "--duel-smoke"]) { return .duel }
-        if !flags.isDisjoint(with: ["--tennis-preview", "--tennis-smoke"]) { return .tennis }
+        if !flags.isDisjoint(with: ["--tennis-preview", "--tennis-smoke", "--ai-challenge-preview"]) { return .tennis }
         return .home
     }
 
@@ -76,8 +76,8 @@ struct WiiShell: View {
             phase = motion.game.state.phase.rawValue
             inMenus = [.menu, .paused, .results].contains(motion.game.state.phase)
         case .tennis:
-            phase = motion.tennis.state.phase.rawValue
-            inMenus = [.menu, .paused, .results].contains(motion.tennis.state.phase)
+            phase = motion.tennis.displayPhase.rawValue
+            inMenus = [.menu, .paused, .results].contains(motion.tennis.displayPhase)
         case .duel:
             phase = String(describing: motion.multiplayer.match.phase)
             inMenus = [.lobby, .paused, .results].contains(motion.multiplayer.match.phase)
