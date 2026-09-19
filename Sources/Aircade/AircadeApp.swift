@@ -64,6 +64,7 @@ struct AircadeApp: App {
                     } else if CommandLine.arguments.contains("--live-test") { motion.start() }
                     if CommandLine.arguments.contains("--multiplayer") { motion.showMultiplayer(true) }
                     if CommandLine.arguments.contains("--duel-smoke") { DuelSmoke.run(motion) }
+                    if CommandLine.arguments.contains("--tennis-smoke") { TennisSmoke.run(motion) }
                     if CommandLine.arguments.contains("--scripted-repro") { ScriptedGameCheck.run(motion, reproduce: true) }
                     if CommandLine.arguments.contains("--scripted-game-test") { ScriptedGameCheck.run(motion) }
                     if CommandLine.arguments.contains("--scripted-demo") { motion.startScripted(.perfectRun) }
@@ -102,7 +103,7 @@ struct AircadeApp: App {
                     motion.shutdownControllerSession(); motion.stop(); motion.camera.stop()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                    if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") {
+                    if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") && !CommandLine.arguments.contains("--tennis-smoke") {
                         motion.game.pause("Paused while Aircade was in the background.")
                         motion.tennis.pause("Paused while Aircade was in the background.")
                         if motion.showingMultiplayer { motion.multiplayer.pause("Paused while Aircade was in the background.") }
