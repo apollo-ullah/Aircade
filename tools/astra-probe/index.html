@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aircade · Astra control probe</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #edf5fa; font: 16px system-ui,sans-serif; color: #183348; }
+  header { height: 86px; display: flex; align-items: center; justify-content: space-between; padding: 18px 28px; background: white; border-bottom: 1px solid #cbdce7; }
+  h1 { margin: 0; font-size: 27px; letter-spacing: -.9px; }
+  h1 span { color: #087cbb; }
+  small { display:block; margin-top: 4px; color: #546d7e; }
+  .badge { border-radius: 20px; padding: 10px 18px; background:#e6f5ff; color:#05659b; font-size:13px; font-weight:700; }
+  canvas { display: block; width: 1024px; height: 540px; cursor: none; }
+  footer { height: 94px; padding: 16px 28px; background: white; }
+  #status { font-weight:700; font-size:20px; color:#086b9c; }
+  p { margin: 5px 0 0; color:#526a79; }
+</style>
+<header><div><h1><span>aircade</span> / ASTRA LAB</h1><small>Recorded native Tennis court · isolated input test</small></div><div class="badge">PHASE 0 · STATIC CONTROL PROBE</div></header>
+<canvas id="court" width="1024" height="540" aria-label="Court control surface"></canvas>
+<footer><div id="status">Move the racket onto the yellow target, then left-click.</div><p id="detail">This tests screenshot-based mouse control. No live ball or tennis physics is running.</p></footer>
+<script type="module">
+const canvas = document.querySelector('canvas'), ctx = canvas.getContext('2d');
+const background = new Image(); background.src = '/court.png';
+let target = { x: 0, y: 0 }, racket = { x: 512, y: 455 }, hit = false, swings = 0, trial = 0;
+const events = [];
+function draw() {
+  ctx.fillStyle = '#112c41'; ctx.fillRect(0, 0, 1024, 540);
+  if (background.complete && background.naturalWidth) ctx.drawImage(background, 0, 0, 1024, 540);
+  ctx.fillStyle = 'rgba(7,20,32,.35)'; ctx.fillRect(0, 0, 1024, 540);
+  ctx.beginPath(); ctx.arc(target.x,target.y,36,0,Math.PI*2);
+  ctx.fillStyle = hit ? '#71ed9a' : '#ffe748'; ctx.fill();
+  ctx.lineWidth=4; ctx.strokeStyle='white'; ctx.stroke();
+  ctx.fillStyle='#122a38'; ctx.font='bold 14px system-ui';ctx.textAlign='center';
+  ctx.fillText(hit ? 'HIT!' : 'TARGET',target.x,target.y+5);
+  ctx.strokeStyle='#6eeaff'; ctx.lineWidth=5; ctx.beginPath();
+  ctx.ellipse(racket.x,racket.y,23,30,0,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(racket.x,racket.y+30);ctx.lineTo(racket.x,racket.y+60);ctx.stroke();
+  ctx.font='bold 15px system-ui';ctx.textAlign='left';ctx.fillStyle='white';
+  ctx.fillText('OBSERVATION ' + trial + '  ·  ' + (hit ? 'TARGET HIT' : 'AWAITING INPUT'),22,30);
+}
+function position(event) {
+  const rect=canvas.getBoundingClientRect();
+  return {x:Math.max(0,Math.min(1024,(event.clientX-rect.left)*1024/rect.width)),y:Math.max(0,Math.min(540,(event.clientY-rect.top)*540/rect.height))};
+}
+canvas.addEventListener('mousemove',e=>{racket=position(e);events.push({type:'move',...racket});draw();});
+canvas.addEventListener('click',e=>{
+  racket=position(e);swings++; const contact=Math.hypot(racket.x-target.x,racket.y-target.y)<=36;
+  hit ||= contact; events.push({type:'swing',...racket,contact});
+  document.querySelector('#status').textContent=hit?'TARGET HIT — input registered.':'Missed. Move onto the yellow target and click again.';
+  draw();
+});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+// Harness-only ground truth. The model receives screenshots, never this object or coordinates.
+window.probe = {
+  reset(next) { trial++; target=next; hit=false;swings=0;events.length=0;racket={x:512,y:455};document.querySelector('#status').textContent='Move the racket onto the yellow target, then left-click.';draw(); },
+  result() { return { trial,hit,swings,events:[...events] }; },
+  loaded: () => background.complete && background.naturalWidth > 0
+};
+background.onload=draw;
+window.probe.reset({x:250,y:240});
+draw();
+</script>
+</html>

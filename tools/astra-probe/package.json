@@ -1,0 +1,12 @@
+{
+  "name": "aircade-astra-phase-zero",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test *.test.mjs",
+    "check": "node run.mjs --self-test",
+    "probe": "node run.mjs",
+    "preview": "node preview.mjs"
+  },
+  "dependencies": { "playwright": "^1.58.2" }
+}

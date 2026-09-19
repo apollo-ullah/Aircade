@@ -7,6 +7,7 @@ DerivedData/
 xcuserdata/
 .local/
 server/node_modules/
+tools/astra-probe/node_modules/
 Resources/Music/
 .env
 __pycache__/
