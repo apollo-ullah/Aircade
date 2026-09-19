@@ -22,6 +22,7 @@ final class PhoneController: ObservableObject {
     @Published private(set) var live = false
     @Published private(set) var feedback = ""
     @Published private(set) var tilt = 0.0
+    @Published private(set) var role: ControllerRole = .unassigned
     private let motion = CMMotionManager()
     private let queue: OperationQueue = {
         let queue = OperationQueue(); queue.maxConcurrentOperationCount = 1
@@ -36,6 +37,7 @@ final class PhoneController: ObservableObject {
     private var sequence: UInt64 = 0
     private var timer: Timer?
     private var feedbackUntil = 0.0
+    private var activeRun: UUID?
     private let controllerID: UUID = {
         let defaults = UserDefaults.standard
         if let value = defaults.string(forKey: "aircade.controllerID"), let id = UUID(uuidString: value) { return id }
@@ -93,9 +95,18 @@ final class PhoneController: ObservableObject {
             guard let self, let link, self.link === link else { return }
             switch message {
             case .welcome(let player):
-                guard player == 2 else { self.disconnect(); return }
+                guard (0...2).contains(player) else { self.disconnect(); return }
                 self.connected = true; self.connecting = false
-                self.status = "Player 2 · Orange"; UIApplication.shared.isIdleTimerDisabled = true
+                self.role = player == 0 ? .unassigned : .player(player)
+                self.status = self.role.label; UIApplication.shared.isIdleTimerDisabled = true
+            case .assignment(let role):
+                guard self.connected, role.isValid else { return }
+                self.role = role; self.status = role.label
+            case .recenter: if self.connected { self.recenter() }
+            case .activeRun(let id):
+                self.activeRun = id; self.feedback = ""; self.feedbackUntil = 0
+            case let .feedbackEvent(run, cue):
+                if self.connected && self.activeRun == run { self.playFeedback(cue.rawValue) }
             case .poll(let request): self.sendSample(request)
             case .feedback(let cue): self.playFeedback(cue)
             case .bye(let reason): self.disconnect(); self.status = reason
@@ -115,17 +126,19 @@ final class PhoneController: ObservableObject {
     func disconnect() {
         let previous = link; link = nil; previous?.cancel()
         connected = false; connecting = false; ready = false; calibration = PhoneOrientation()
+        role = .unassigned; activeRun = nil; feedback = ""
         UIApplication.shared.isIdleTimerDisabled = false
     }
     func recenter() {
         consume()
-        guard let reading, now - reading.time < 0.25 else { return }
+        guard let reading, now >= reading.time, now - reading.time < 0.25 else { return }
         calibration.recenter(reading.orientation); ready = true
+        sequence += 1
         link?.send(.calibrating)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
     private func consume() {
-        if let value = latest.take() { reading = value }
+        if let value = latest.take() { reading = value; sequence += 1 }
     }
     private func refresh() {
         consume()
@@ -137,8 +150,10 @@ final class PhoneController: ObservableObject {
         if now > feedbackUntil { feedback = "" }
     }
     private func sendSample(_ request: UUID) {
-        consume(); sequence += 1
-        let age = reading.map { max(0, now - $0.time) } ?? 60
+        consume()
+        // Re-polling the same sensor reading retains its sequence and original age.
+        // The host rejects duplicates rather than manufacturing new collision samples.
+        let age = reading.map { now >= $0.time ? now - $0.time : 60 } ?? 60
         let q = reading.flatMap { calibration.calibrated($0.orientation) }
         let frame = PlayerControllerFrame(controllerID: controllerID, sessionID: session, sequence: sequence,
             source: "iPhone", orientation: q ?? simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0)), ready: q != nil && age < 0.25, sampleAge: age)

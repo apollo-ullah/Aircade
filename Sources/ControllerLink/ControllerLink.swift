@@ -2,6 +2,28 @@ import Foundation
 import Network
 import MotionCore
 
+/// Role is presentation/assignment, not the phone's connection identity.
+public enum ControllerRole: Codable, Equatable {
+    case unassigned
+    case solo
+    case player(Int)
+
+    public var isValid: Bool {
+        switch self { case .unassigned, .solo: return true; case .player(let value): return value == 1 || value == 2 }
+    }
+    public var label: String {
+        switch self {
+        case .unassigned: return "Connected · choose a game on the Mac"
+        case .solo: return "Solo controller"
+        case .player(let value): return "Player \(value) · \(value == 1 ? "Blue" : "Orange")"
+        }
+    }
+}
+
+public enum ControllerFeedback: String, Codable, CaseIterable {
+    case hit, block, damage, victory, defeat, draw
+}
+
 public enum ControllerMessage: Codable {
     case hello(code: String, controller: UUID, session: UUID)
     case welcome(player: Int)
@@ -9,6 +31,10 @@ public enum ControllerMessage: Codable {
     case sample(request: UUID, frame: PlayerControllerFrame)
     case feedback(String)
     case calibrating
+    case assignment(ControllerRole)
+    case recenter
+    case activeRun(UUID?)
+    case feedbackEvent(run: UUID, cue: ControllerFeedback)
     case bye(String)
 }
 

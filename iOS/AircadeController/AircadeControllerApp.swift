@@ -20,6 +20,7 @@ struct AircadeControllerApp: App {
 struct ControllerScreen: View {
     @ObservedObject var controller: PhoneController
     private let blue = Color(red: 0.04, green: 0.48, blue: 0.72)
+    private var controllerColor: Color { controller.role == .player(2) ? .orange : blue }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -35,8 +36,8 @@ struct ControllerScreen: View {
     }
     private var pairing: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Text("Your phone.\nYour saber.").font(.system(size: 42, weight: .bold)).tracking(-1)
-            Text("Open Saber Duel on your Mac. Connect both devices to the same Wi-Fi, allow Local Network access, then enter the six-digit lobby code.")
+            Text("Your phone.\nYour controller.").font(.system(size: 42, weight: .bold)).tracking(-1)
+            Text("Open Aircade on your Mac. Connect both devices to the same Wi-Fi, allow Local Network access, then enter the six-digit pairing code. Stay connected as you switch games.")
                 .foregroundStyle(.secondary)
             TextField("Lobby code", text: $controller.code)
                 .font(.system(size: 30, weight: .bold, design: .monospaced)).keyboardType(.numberPad)
@@ -47,7 +48,7 @@ struct ControllerScreen: View {
                 }
             if controller.lobbies.isEmpty {
                 Label("Looking for Aircade lobbies…", systemImage: "antenna.radiowaves.left.and.right")
-                Text("No Mac visible? Keep the Mac’s Saber Duel lobby open. Event Wi-Fi may block local connections; try a personal hotspot.")
+                Text("No Mac visible? Keep Aircade open on the Mac. Event Wi-Fi may block local connections; try a personal hotspot.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             ForEach(controller.lobbies) { lobby in
@@ -62,26 +63,26 @@ struct ControllerScreen: View {
     }
     private var controls: some View {
         VStack(spacing: 24) {
-            Text("ORANGE").font(.system(size: 42, weight: .heavy)).italic().foregroundStyle(.orange)
+            Text(controller.role.label.uppercased()).font(.system(size: 28, weight: .heavy)).italic().foregroundStyle(controllerColor)
             ZStack {
-                Circle().fill(.orange.opacity(0.10)).frame(width: 220, height: 220)
+                Circle().fill(controllerColor.opacity(0.10)).frame(width: 220, height: 220)
                 VStack(spacing: 0) {
-                    Capsule().fill(.orange.gradient).frame(width: 18, height: 130)
+                    Capsule().fill(controllerColor.gradient).frame(width: 18, height: 130)
                     RoundedRectangle(cornerRadius: 8).fill(.gray).frame(width: 25, height: 45)
                 }.rotationEffect(.degrees(controller.tilt))
             }
-            Text(controller.feedback.isEmpty ? (controller.ready && controller.live ? "READY TO DUEL" : "HOLD UPRIGHT TO START") : controller.feedback)
-                .font(.headline).foregroundStyle(.orange)
+            Text(controller.feedback.isEmpty ? (controller.ready && controller.live ? "READY TO PLAY" : "HOLD UPRIGHT TO START") : controller.feedback)
+                .font(.headline).foregroundStyle(controllerColor)
             Text("Hold your phone upright with its screen facing you. The top edge points along your saber. Tap Recenter, then tilt to swing.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary)
             Button { controller.recenter() } label: {
                 Label(controller.ready ? "Recenter" : "I’m holding it upright", systemImage: "scope")
                     .font(.title3.bold()).frame(maxWidth: .infinity).padding(.vertical, 16)
-            }.buttonStyle(.borderedProminent).tint(.orange).disabled(!controller.live)
+            }.buttonStyle(.borderedProminent).tint(controllerColor).disabled(!controller.live)
             if !controller.live { Text("Waiting for motion. Allow Motion & Fitness access in Settings.").font(.footnote) }
             Text("Start the match on the Mac. Keep this app open. Recenter pauses an active match.")
                 .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button("Leave game") { controller.disconnect() }.buttonStyle(.bordered)
+            Button("Disconnect from Mac") { controller.disconnect() }.buttonStyle(.bordered)
         }.frame(maxWidth: .infinity)
     }
 }

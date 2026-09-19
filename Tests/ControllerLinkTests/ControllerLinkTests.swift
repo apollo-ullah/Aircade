@@ -48,4 +48,32 @@ final class ControllerLinkTests: XCTestCase {
         host?.onReady = nil; host?.onMessage = nil; phone?.onMessage = nil
         host?.cancel(); phone?.cancel(); listener.cancel()
     }
+
+    func testPhoneRoleRecenterAndRunScopedFeedbackWireCompatibility() throws {
+        func decode(_ message: ControllerMessage) throws -> ControllerMessage {
+            try JSONDecoder().decode(ControllerMessage.self, from: ControllerLink.encode(message).dropFirst(4))
+        }
+        for role in [ControllerRole.unassigned, .solo, .player(1), .player(2)] {
+            guard case .assignment(let result) = try decode(.assignment(role)) else { return XCTFail("Role envelope") }
+            XCTAssertEqual(result, role); XCTAssertTrue(result.isValid)
+        }
+        XCTAssertFalse(ControllerRole.player(0).isValid)
+        XCTAssertFalse(ControllerRole.player(3).isValid)
+        for player in 0...2 {
+            guard case .welcome(let result) = try decode(.welcome(player: player)) else { return XCTFail("Greeting") }
+            XCTAssertEqual(result, player)
+        }
+        guard case .recenter = try decode(.recenter) else { return XCTFail("Recenter") }
+        let run = UUID()
+        guard case .activeRun(let active) = try decode(.activeRun(run)) else { return XCTFail("Run") }
+        XCTAssertEqual(active, run)
+        guard case .activeRun(let ended) = try decode(.activeRun(nil)) else { return XCTFail("Run end") }
+        XCTAssertNil(ended)
+        for cue in ControllerFeedback.allCases {
+            guard case let .feedbackEvent(resultRun, resultCue) = try decode(.feedbackEvent(run: run, cue: cue)) else {
+                return XCTFail("Feedback")
+            }
+            XCTAssertEqual(resultRun, run); XCTAssertEqual(resultCue, cue)
+        }
+    }
 }

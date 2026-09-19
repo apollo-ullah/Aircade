@@ -43,12 +43,25 @@ public struct PlayerControllers {
         public let sessionID: UUID
         public fileprivate(set) var frame: PlayerControllerFrame?
         public fileprivate(set) var receivedAt: Double?
+        fileprivate var lastSequence: UInt64?
+        /// Fixed when a sample arrives. Rendering it again cannot make it newer.
+        public var capturedAt: Double? {
+            guard let frame, let receivedAt else { return nil }
+            return receivedAt - frame.sampleAge
+        }
+        public func sampleAge(at now: Double) -> Double {
+            guard now.isFinite, let receivedAt, let capturedAt, now >= receivedAt else { return .infinity }
+            return now - capturedAt
+        }
         public var orientation: simd_quatf? {
             frame.map { simd_normalize(simd_quatf(vector: $0.orientation)) }
         }
         public func isFresh(at now: Double) -> Bool {
-            guard let frame, let receivedAt else { return false }
-            return frame.ready && now >= receivedAt && now - receivedAt + frame.sampleAge < 0.25
+            frame?.ready == true && sampleAge(at: now) < 0.25
+        }
+
+        fileprivate init(controllerID: UUID, sessionID: UUID) {
+            self.controllerID = controllerID; self.sessionID = sessionID
         }
     }
     private var connections: [PlayerSlot: Connection] = [:]
@@ -62,14 +75,18 @@ public struct PlayerControllers {
         return true
     }
     public mutating func remove(_ player: PlayerSlot) { connections[player] = nil }
+    /// Drop collision input without allowing an old sequence to become valid again.
+    public mutating func invalidate(_ player: PlayerSlot) {
+        connections[player]?.frame = nil
+    }
 
     @discardableResult
     public mutating func receive(_ frame: PlayerControllerFrame, for player: PlayerSlot, at time: Double) -> Bool {
         guard frame.isValid, time.isFinite, var connection = connections[player],
               connection.controllerID == frame.controllerID, connection.sessionID == frame.sessionID,
-              connection.frame.map({ frame.sequence > $0.sequence }) ?? true,
+              connection.lastSequence.map({ frame.sequence > $0 }) ?? true,
               connection.receivedAt.map({ time >= $0 }) ?? true else { return false }
-        connection.frame = frame; connection.receivedAt = time
+        connection.frame = frame; connection.receivedAt = time; connection.lastSequence = frame.sequence
         connections[player] = connection
         return true
     }

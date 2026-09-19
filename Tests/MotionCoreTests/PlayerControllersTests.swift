@@ -59,4 +59,17 @@ final class PlayerControllersTests: XCTestCase {
         XCTAssertFalse(players.receive(frame(p1, 2, age: -1), for: .one, at: 100))
         XCTAssertFalse(players.receive(frame(p1, 2), for: .one, at: .nan))
     }
+
+    func testCaptureTimeIsStableAndInvalidationRetainsSequenceWatermark() {
+        var players = PlayerControllers()
+        players.assign(.one, controllerID: p1, sessionID: session)
+        players.receive(frame(p1, 8, age: 0.04), for: .one, at: 100)
+        XCTAssertEqual(players[.one]!.capturedAt!, 99.96, accuracy: 0.000001)
+        XCTAssertEqual(players[.one]!.sampleAge(at: 100.15), 0.19, accuracy: 0.000001)
+        XCTAssertFalse(players[.one]!.isFresh(at: 99.99))
+        players.invalidate(.one)
+        XCTAssertFalse(players[.one]!.isFresh(at: 100.1))
+        XCTAssertFalse(players.receive(frame(p1, 8), for: .one, at: 100.1))
+        XCTAssertTrue(players.receive(frame(p1, 9), for: .one, at: 100.11))
+    }
 }
