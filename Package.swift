@@ -8,6 +8,7 @@ let package = Package(
     targets: [
         .target(name: "MotionCore"),
         .executableTarget(name: "Aircade", dependencies: ["MotionCore"]),
-        .testTarget(name: "MotionCoreTests", dependencies: ["MotionCore"])
+        .testTarget(name: "MotionCoreTests", dependencies: ["MotionCore"]),
+        .testTarget(name: "AircadeTests", dependencies: ["Aircade"])
     ]
 )
