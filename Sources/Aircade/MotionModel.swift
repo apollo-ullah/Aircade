@@ -11,6 +11,7 @@ private struct HeadphoneReading {
     let acceleration: SIMD3<Double>
     let timestamp: Double
     let source: String
+    let receivedAt: Double
 }
 private enum HeadphoneDelivery {
     case sample(HeadphoneReading)
@@ -20,6 +21,9 @@ private enum HeadphoneDelivery {
 final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDelegate {
     @Published var running = false
     @Published var simulated = false
+    @Published var scriptedScenario: SaberScript?
+    @Published var selectedScript: SaberScript = .perfectRun
+    private var scriptController = ScriptedSaber(.perfectRun)
     @Published var status = "Connect AirPods, then start tracking"
     @Published var authorization = "Not requested"
     @Published var available = false
@@ -27,6 +31,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     @Published var waitingForMotion = false
     @Published var motionError = ""
     @Published var source = "None"
+    @Published var incomingSource = "None"
     @Published var attitude = SIMD3<Double>.zero
     @Published var rotation = SIMD3<Double>.zero
     @Published var acceleration = SIMD3<Double>.zero
@@ -42,7 +47,8 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     @Published var speedHistory: [Double] = []
     @Published var smoothing = 0.045
     @Published var swingThreshold = 3.0
-    @Published var grip = 0 { didSet { recenter() } }
+    @Published var grip = 0 { didSet { if !loadingGrip { recenter() } } }
+    private var loadingGrip = false
     @Published var calibrated = false
     @Published var condition = "Handheld — left"
     @Published var testing = false
@@ -72,10 +78,16 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     let camera = HandTracker()
     let scene = SaberScene()
     lazy var arena = TrainingArena(scene: scene)
-    lazy var game = ArcadeGame(scene: scene)
+    lazy var game = ArcadeGame(scene: scene, clock: { [weak self] in self?.now ?? ProcessInfo.processInfo.systemUptime })
     private var customBasis: simd_quatf?
-    private var calibrationReference: simd_quatf?
-    private var calibrationLeft: SIMD3<Float>?
+    // Temporarily bypass the newer calibration at the user's request. Retained below
+    // for comparison; the live app defaults to three instantaneous manual captures.
+    var useSimpleCalibration = true
+    var openCalibrationWhenReady = false
+    private var simpleCalibration = SimpleGripCalibration()
+    private var calibrationSession: GripCalibrationSession?
+    private var sourceLock = MotionSourceLock()
+    private var lastReportedAt: Double?
     private var handAnchor: CGPoint?
     private var handPosition = SIMD3<Float>(0, -0.5, 0)
     private var lastHandTime = 0.0
@@ -107,13 +119,20 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     private var lastHealthWrite = 0.0
     private var demoOrigin = 0.0
 
-    override init() {
-        logDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    override convenience init() { self.init(logDirectory: nil) }
+
+    init(logDirectory customLogDirectory: URL?) {
+        logDirectory = customLogDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Aircade/Logs", isDirectory: true)
         super.init()
         arena.enabled = false
         scene.setArcadeVisible(true)
         game.onEvent = { [weak self] message in self?.event(message) }
+        game.pollInput = { [weak self] in
+            guard let self else { return }
+            if self.scriptedScenario != nil { self.updateScriptedSaber() }
+            else { self.consumeMotion() }
+        }
         arena.onEvent = { [weak self] message in self?.event(message) }
         camera.onPoint = { [weak self] point, time in self?.receiveHand(point, time: time) }
         camera.onLost = { [weak self] in
@@ -128,7 +147,10 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         self.inputTimer = inputTimer
     }
 
-    private var now: Double { ProcessInfo.processInfo.systemUptime }
+    // Injectable clock and storage keep model regressions isolated from real controllers and saved grips.
+    var clock: () -> Double = { ProcessInfo.processInfo.systemUptime }
+    var gripDefaults = UserDefaults.standard
+    private var now: Double { clock() }
     private var basis: simd_quatf {
         if grip == 4, let customBasis { return customBasis }
         switch grip {
@@ -146,8 +168,9 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         running = true
         trackingStartedAt = now
         waitingForMotion = false; motionError = ""
-        source = "None"
-        calibrationStep = 0
+        source = "None"; incomingSource = "None"
+        sourceLock = MotionSourceLock(); lastReportedAt = nil
+        calibrationStep = 0; calibrationSession = nil
         samples = 0; gaps = 0; switches = 0; swings = 0
         frequency = 0; lastReceived = nil; lastSensorTime = nil
         rawOrientation = nil; calibrated = false
@@ -197,10 +220,35 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
                     q: simd_quatf(ix: Float(q.x), iy: Float(q.y), iz: Float(q.z), r: Float(q.w)),
                     euler: SIMD3(motion.attitude.yaw, motion.attitude.pitch, motion.attitude.roll),
                     rate: SIMD3(r.x, r.y, r.z), acceleration: SIMD3(a.x, a.y, a.z),
-                    timestamp: motion.timestamp, source: location)), session: session)
+                    timestamp: motion.timestamp, source: location,
+                    receivedAt: ProcessInfo.processInfo.systemUptime)), session: session)
             }
         }
         event(demo ? "Started simulation" : "Started real AirPods stream")
+    }
+
+    func startScripted(_ scenario: SaberScript) {
+        stop()
+        showLab(false)
+        useCamera = false; simulated = true; running = true; calibrated = true
+        scriptedScenario = scenario; scriptController = ScriptedSaber(scenario)
+        source = "Simulated"; incomingSource = "Simulated"
+        samples = 0; arrivals = []; sampleAge = 0
+        status = "SCRIPTED SABER • \(scenario.rawValue)"
+        openLog()
+        updateScriptedSaber()
+        game.start(demo: true, seed: 42)
+        event("SCRIPT_START \(scenario.rawValue)")
+    }
+
+    private func updateScriptedSaber() {
+        guard running, scriptedScenario != nil else { return }
+        let t = now
+        let pose = scriptController.pose(for: game.state)
+        lastReceived = t; sampleAge = 0; samples += 1
+        saber = pose.orientation
+        scene.setPose(pose, trail: true); scene.setLive(true)
+        game.update(pose: pose, time: t, ready: true)
     }
 
     func stop() {
@@ -211,9 +259,12 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         manager = nil
         motionServiceActive = false; waitingForMotion = false
         demoTimer?.invalidate(); demoTimer = nil
+        scriptedScenario = nil
         if testing { finishTrial(message: "Test interrupted: tracking stopped") }
         if running { event("Stopped stream") }
         running = false
+        calibrated = false
+        calibrationStep = 0; calibrationSession = nil
         status = "Stopped"
         scene.setLive(false)
         arena.invalidateInput(); game.invalidateInput()
@@ -228,15 +279,16 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         case .error(let message):
             motionError = message; status = message; event("Motion error: \(message)")
         case .sample(let sample):
+            guard now - sample.receivedAt < 0.25 else { return }
             if waitingForMotion { waitingForMotion = false }
             if !motionError.isEmpty { motionError = "" }
             receive(q: sample.q, euler: sample.euler, rate: sample.rate, accel: sample.acceleration,
-                    sensorTime: sample.timestamp, location: sample.source)
+                    sensorTime: sample.timestamp, location: sample.source, receivedAt: sample.receivedAt)
         }
     }
 
     func recenter() {
-        guard running, let rawOrientation, sampleAge < 0.5 else { return }
+        guard calibrationStep == 0, hasFreshMotion, let rawOrientation else { return }
         arena.invalidateInput(); game.invalidateInput()
         handAnchor = camera.point
         handPosition = SIMD3<Float>(0, -0.5, 0)
@@ -249,7 +301,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     }
 
     func beginTrial() {
-        guard running, !simulated, sampleAge < 0.5 else { return }
+        guard hasFreshMotion, !simulated, calibrationStep == 0 else { return }
         trial = ContinuityTracker()
         trialReference = rawOrientation
         trialCondition = condition
@@ -276,34 +328,108 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         } catch { logError = "Could not save test report: \(error.localizedDescription)" }
     }
 
-    private func receive(q: simd_quatf, euler: SIMD3<Double>, rate: SIMD3<Double>,
-                         accel: SIMD3<Double>, sensorTime: Double, location: String) {
-        let received = now
-        guard q.vector.x.isFinite, q.vector.y.isFinite, q.vector.z.isFinite, q.vector.w.isFinite,
-              simd_length(q.vector) > 0.001 else { return }
-        // Core Motion can repeat a timestamp. Such callbacks must not count as fresh tracking.
-        if location == source, let lastSensorTime, sensorTime <= lastSensorTime { return }
-        let changed = source != "None" && source != location
-        let interrupted = lastReceived.map { received - $0 > 0.5 } ?? false
-        let dt = lastReceived.map { received - $0 } ?? 0.02
-        lastReceived = received; lastSensorTime = sensorTime
-        sampleAge = 0
-        if changed || interrupted {
-            calibrated = false
-            tracker = OrientationTracker()
-            arena.invalidateInput(); game.invalidateInput()
-            calibrationStep = 0
-            event(changed ? "Source changed to \(location) — recenter required" : "Stream resumed — recenter required")
+    var sourceMismatch: Bool { !simulated && incomingSource != "None" && source != incomingSource }
+    var hasFreshMotion: Bool {
+        running && !sourceMismatch && (lastReceived.map { now - $0 < 0.25 } ?? false)
+    }
+    var canAdoptIncomingSource: Bool {
+        sourceMismatch && (incomingSource == "Left" || incomingSource == "Right") &&
+        (lastReportedAt.map { now - $0 < 0.25 } ?? false)
+    }
+    var controllerName: String {
+        if simulated { return scriptedScenario == nil ? "Demo controller" : "Scripted saber" }
+        return source == "Left" || source == "Right" ? "\(source) AirPod" : "AirPod"
+    }
+    var calibrationButtonTitle: String { "\(hasGripCalibration ? "Recalibrate" : "Calibrate") \(controllerName)" }
+    var controllerLabel: String {
+        if simulated { return scriptedScenario == nil ? "Demo controller" : "Scripted saber" }
+        if source == "None" { return "Waiting for an AirPod sensor" }
+        if sourceMismatch { return "Selected: \(source) · macOS reporting: \(incomingSource)" }
+        return "Controller: \(source) AirPod"
+    }
+
+    func adoptIncomingSource() {
+        guard canAdoptIncomingSource, sourceLock.adoptReported() else { return }
+        let wasCalibrating = calibrationStep > 0
+        source = sourceLock.selected ?? "None"
+        rawOrientation = nil; lastReceived = nil; lastSensorTime = nil; sampleAge = .infinity
+        calibrated = false; tracker = OrientationTracker(); arrivals.removeAll()
+        loadGrip(for: source)
+        arena.invalidateInput(); game.invalidateInput(); scene.setLive(false)
+        if wasCalibrating {
+            simpleCalibration = SimpleGripCalibration()
+            calibrationSession = useSimpleCalibration ? nil : GripCalibrationSession(source: source)
+            calibrationSource = source; calibrationStep = 1; calibrationError = ""
+            calibrationMessage = "Controller changed. Start again with the \(source) AirPod."
         }
-        if source != location {
-            source = location
-            if !simulated { loadGrip(for: location) }
-            if changed { calibrated = false; tracker = OrientationTracker() }
+        event("User selected \(source) AirPod; recenter or calibrate before playing")
+    }
+
+    private func interruptCalibration(_ message: String) {
+        guard calibrationStep > 0 else { return }
+        if useSimpleCalibration {
+            guard calibrationError != message else { return }
+            simpleCalibration = SimpleGripCalibration()
+            calibrationStep = 1
+        } else {
+            guard calibrationSession?.interruption == nil else { return }
+            calibrationSession?.interrupt(message)
+        }
+        calibrationError = message
+        calibrationMessage = message
+        event("CALIBRATION_INTERRUPTED \(message)")
+    }
+
+    func receive(q: simd_quatf, euler: SIMD3<Double>, rate: SIMD3<Double>,
+                         accel: SIMD3<Double>, sensorTime: Double, location: String,
+                         receivedAt: Double? = nil) {
+        let received = receivedAt ?? now
+        guard now - received < 0.25, received <= now,
+              q.vector.indices.allSatisfy({ q.vector[$0].isFinite }),
+              simd_length(q.vector) > 0.001, sensorTime.isFinite else { return }
+        if !simulated {
+            let previousReported = incomingSource
+            let accepted = sourceLock.observe(location)
+            incomingSource = location; lastReportedAt = received
+            if previousReported != location && previousReported != "None" {
+                switches += 1
+                event("macOS source changed \(previousReported) → \(location); selected=\(source)")
+            }
+            guard accepted else {
+                if testing { finishTrial(message: "Test interrupted: motion source changed — no pass recorded") }
+                calibrated = false; tracker = OrientationTracker()
+                arena.invalidateInput(); game.invalidateInput(); scene.setLive(false)
+                interruptCalibration("macOS switched to \(location). Return to \(source), then Start over, or select the other earbud below.")
+                status = "\(source) selected, but macOS is sending \(location) motion"
+                return
+            }
+            if source == "None" {
+                source = location
+                loadGrip(for: location)
+            }
+        } else { source = location; incomingSource = location }
+        // A repeated hardware timestamp must never refresh an old pose.
+        if let lastSensorTime, sensorTime <= lastSensorTime { return }
+        let dt = lastReceived.map { received - $0 } ?? 0.02
+        let interrupted = dt >= ArcadeGame.trackingLossDelay
+        lastReceived = received; lastSensorTime = sensorTime
+        sampleAge = max(0, now - received)
+        if interrupted {
+            calibrated = false; tracker = OrientationTracker()
+            arena.invalidateInput(); game.invalidateInput()
+            interruptCalibration("Motion was interrupted. Check your controller, then choose Start over.")
+            event("Stream resumed — recenter required")
+        } else if dt > 0.5 && calibrationStep > 0 {
+            // Keep setup's existing continuity requirements separate from gameplay.
+            interruptCalibration("Motion was interrupted. Check your controller, then choose Start over.")
         }
         rawOrientation = simd_normalize(q)
-        // Only the very first sample is automatically calibrated. Later interruptions need explicit recentering.
         if samples == 0 { tracker.recenter(q); calibrated = true }
-        source = location; samples += 1
+        samples += 1
+        if calibrationStep > 0 {
+            calibrationSession?.ingest(q: q, speed: Float(simd_length(rate)), sensorTime: sensorTime,
+                                       receivedAt: received, source: location)
+        }
         attitude = euler * (180 / .pi)
         rotation = rate; acceleration = accel; quaternion = q.vector
         speed = simd_length(rate)
@@ -313,9 +439,10 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         arrivals.removeAll { received - $0 > 2 }
         frequency = arrivals.count > 1 ? Double(arrivals.count - 1) / (received - arrivals[0]) : 0
         continuity.ingest(time: received, source: location)
-        gaps = continuity.gaps; switches = continuity.switches
-        if calibrated {
-            saber = tracker.update(q, basis: basis, delta: min(dt, 0.1), smoothing: smoothing)
+        gaps = continuity.gaps
+        if calibrated && calibrationStep == 0 {
+            saber = tracker.update(q, basis: basis, delta: min(dt, 0.1),
+                                   smoothing: dt >= ArcadeGame.freshInputAge ? 0 : smoothing)
         }
         updateScene(at: received)
         if detector.update(speed: speed, time: received, threshold: swingThreshold) {
@@ -363,7 +490,11 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         if authorization != permission { authorization = permission }
     }
 
-    private func tick() {
+    func tick() {
+        if openCalibrationWhenReady && hasFreshMotion {
+            openCalibrationWhenReady = false
+            beginGripCalibration()
+        }
         if running && !simulated { refreshPermissions() }
         let waiting = running && !simulated && samples == 0 && now - trackingStartedAt > 5
         if waitingForMotion != waiting { waitingForMotion = waiting }
@@ -374,12 +505,15 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
             if status != message { status = message }
         }
         sampleAge = lastReceived.map { now - $0 } ?? .infinity
-        if sampleAge > 0.5 {
+        if sampleAge >= ArcadeGame.freshInputAge {
             frequency = 0
             scene.setLive(false)
-            arena.invalidateInput(); game.invalidateInput()
-            if running && samples > 0 { status = "Motion stale — waiting for fresh samples" }
-            if testing { testProgress = 0 }
+            arena.invalidateInput(); game.waitForFreshInput()
+            if running && samples > 0 && !sourceMismatch { status = "Motion stale — waiting for fresh samples" }
+            if sampleAge > 0.5 && running && samples > 0 {
+                interruptCalibration("Motion stopped during setup. Wait for fresh motion, then choose Start over.")
+            }
+            if sampleAge > 0.5 && testing { testProgress = 0 }
         }
         if now - lastHealthWrite > 1 {
             lastHealthWrite = now
@@ -387,16 +521,23 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
                 "status": status, "authorization": authorization, "available": available,
                 "motionServiceActive": motionServiceActive, "waitingForMotion": waitingForMotion,
                 "cachedMotionAvailable": manager?.deviceMotion != nil, "motionError": motionError,
-                "source": source, "samples": samples, "sampleAgeSeconds": sampleAge.isFinite ? sampleAge : -1,
+                "source": source, "incomingSource": incomingSource, "sourceMismatch": sourceMismatch, "samples": samples, "sampleAgeSeconds": sampleAge.isFinite ? sampleAge : -1,
                 "frequencyHz": frequency, "testMessage": testMessage, "testProgressSeconds": testProgress,
                 "calibrated": calibrated, "logPath": logPath,
                 "gripPreset": grip, "calibrationStep": calibrationStep,
+                "calibrationMode": useSimpleCalibration ? "simple-three-pose-v1" : "steady-five-step",
                 "calibrationMessage": calibrationMessage, "calibrationError": calibrationError,
                 "calibrationSource": calibrationSource,
-                "calibrationTiltDegrees": calibrationAssessment.map { Double($0.degrees) } ?? -1,
+                "calibrationTiltDegrees": calibrationTiltDegrees.map { Double($0) } ?? -1,
+                "calibrationPoseReady": calibrationPoseReady, "calibrationHint": calibrationPoseHint,
                 "calibrationAxisSeparationDegrees": calibrationAssessment?.separationDegrees.map { Double($0) } ?? -1,
                 "cameraEnabled": useCamera, "cameraStatus": camera.status,
                 "cameraTracking": camera.point != nil, "cameraHz": camera.frameRate,
+                "scriptedScenario": scriptedScenario?.rawValue ?? "",
+                "gameMaxFeedbackSeconds": game.maxFeedbackSeconds, "gameSlowFrames": game.slowFrames,
+                "gameMaxFrameSeconds": game.maxFrameSeconds,
+                "gameRecoveringInput": game.recoveringInput, "gameTransientInputGaps": game.transientInputGaps,
+                "gamePauseReason": game.pauseReason,
                 "gamePhase": game.state.phase.rawValue, "gameScore": game.state.score, "gameLives": game.state.lives, "gameRemaining": game.state.remaining,
                 "arenaMode": arena.mode.rawValue, "hits": arena.hits, "parries": arena.parries,
                 "misses": arena.misses, "arenaMessage": arena.message]
@@ -472,55 +613,51 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     private func updateScene(at time: Double) {
         let freshMotion = lastReceived.map { now - $0 < 0.25 } ?? false
         let freshHand = camera.running && camera.point != nil && now - lastHandTime < 0.25
-        let ready = running && calibrated && freshMotion && (!useCamera || freshHand) && calibrationStep == 0
+        let ready = running && !sourceMismatch && calibrated && freshMotion && (!useCamera || freshHand) && calibrationStep == 0
         let pose = SaberPose(position: useCamera ? handPosition : SIMD3<Float>(0, -0.5, 0), orientation: saber)
         scene.setPose(pose, trail: ready)
         scene.setLive(ready)
         if showingLab { arena.update(pose: pose, time: time, ready: ready) }
-        else { game.update(pose: pose, time: time, ready: ready) }
+        else if running && !sourceMismatch && calibrated && calibrationStep == 0 && !freshMotion {
+            game.waitForFreshInput()
+        } else { game.update(pose: pose, time: time, ready: ready) }
     }
 
     func beginGripCalibration() {
-        guard running, !simulated, sampleAge < 0.5 else { return }
+        guard running, !simulated, hasFreshMotion else { return }
+        simpleCalibration = SimpleGripCalibration()
+        calibrationSession = useSimpleCalibration ? nil : GripCalibrationSession(source: source)
         calibrationError = ""; calibrationAttempt = 0; calibrationSource = source
         calibrationStep = 1
-        calibrationMessage = "1 / 3 · Hold the controller upright, in the centre. Capture neutral."
-        calibrationReference = nil; calibrationLeft = nil
+        calibrationMessage = "Hold the \(source) AirPod in your playing grip. Save an upright starting pose."
         arena.invalidateInput(); game.invalidateInput()
     }
 
     func cancelGripCalibration() {
-        calibrationStep = 0
+        calibrationStep = 0; calibrationSession = nil
         calibrationError = ""
-        calibrationMessage = "Calibration cancelled. Recenter before playing."
+        calibrationMessage = "Calibration cancelled. Your previous grip is unchanged. Recenter before playing."
         calibrated = false
         arena.invalidateInput(); game.invalidateInput()
     }
 
-    var calibrationAssessment: GripCalibration.TiltAssessment? {
-        guard calibrationStep > 1, let reference = calibrationReference, let rawOrientation else { return nil }
-        let vector = GripCalibration.rotationVector(reference: reference, sample: rawOrientation)
-        return GripCalibration.assessTilt(vector, comparedTo: calibrationStep == 3 ? calibrationLeft : nil)
-    }
-
+    var calibrationAssessment: GripCalibration.TiltAssessment? { calibrationSession?.assessment(at: now) }
+    var calibrationTiltDegrees: Float? { hasFreshMotion ? calibrationSession?.angleDegrees(at: now) : nil }
+    var calibrationPreview: simd_quatf? { hasFreshMotion ? calibrationSession?.preview(at: now) : nil }
+    var calibrationPoseReady: Bool { hasFreshMotion && (useSimpleCalibration || calibrationSession?.feedback(at: now).ready == true) }
     var calibrationPoseHint: String {
-        guard running, sampleAge < 0.25 else { return "Waiting for fresh motion. Keep the active earbud out of its case." }
-        if calibrationStep == 1 { return "Hold the \(source) AirPod upright, then save your starting pose." }
-        guard let assessment = calibrationAssessment else { return "The starting pose is missing. Choose Start over." }
-        switch assessment.issue {
-        case .tooSmall: return "Tilt more from upright. Aim for 30–60°. Rotate the \(source) AirPod, not just your arm."
-        case .tooLarge: return "Too far from the starting pose. Return upright, then make a smaller 30–60° tilt."
-        case .sameAxis: return "This repeats the left-tilt motion. Return upright, then tip toward the screen instead of sideways."
-        case .invalid: return "The saved poses cannot be compared. Choose Start over and keep the same grip."
-        case nil: return "Pose looks good. Hold it here and press \(calibrationStep == 3 ? "Finish" : "Save")."
-        }
+        if sourceMismatch { return "macOS is sending \(incomingSource) motion. Your \(source) calibration is paused. Choose which earbud to use." }
+        if useSimpleCalibration { return calibrationError.isEmpty ? calibrationMessage : calibrationError }
+        return calibrationSession?.feedback(at: now).message ?? "Start grip setup to capture a starting pose."
     }
 
     func useSavedGrip() {
-        guard hasGripCalibration else { return }
-        calibrationStep = 0; calibrationError = ""
-        recenter()
-        calibrationMessage = "Using saved grip for \(source). Press R while upright."
+        guard hasGripCalibration, hasFreshMotion else { return }
+        calibrationStep = 0; calibrationSession = nil; calibrationError = ""
+        loadingGrip = true; grip = 4; loadingGrip = false
+        calibrated = false
+        calibrationMessage = "Using saved grip for \(source). Hold upright and press R before playing."
+        arena.invalidateInput(); game.invalidateInput()
     }
 
     private func rejectCalibration(_ message: String) {
@@ -532,60 +669,64 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
 
     func captureGripPose() {
         consumeMotion()
-        guard running, !simulated, let lastReceived, now - lastReceived < 0.25, let rawOrientation else {
-            rejectCalibration("No fresh motion to save. Move the active earbud gently, then try again.")
-            return
+        guard running, !simulated, hasFreshMotion, source == calibrationSource else {
+            rejectCalibration(calibrationPoseHint); return
         }
-        guard source == calibrationSource else {
-            rejectCalibration("The active earbud changed to \(source). Choose Start over using that earbud.")
+        if useSimpleCalibration { captureSimpleGripPose(); return }
+        // Newer steady-window calibration is bypassed while useSimpleCalibration is true.
+        let capturedStep = calibrationStep
+        guard calibrationSession?.capture(at: now) == true else {
+            rejectCalibration(calibrationPoseHint); return
+        }
+        calibrationError = ""
+        if capturedStep == GripCalibrationSession.Stage.verify.rawValue {
+            guard let value = calibrationSession?.proposedBasis, let reference = calibrationSession?.reference else {
+                rejectCalibration("The proposed grip is missing. Choose Start over."); return
+            }
+            customBasis = value; hasGripCalibration = true
+            gripDefaults.set(value.vector.indices.map { Double(value.vector[$0]) }, forKey: "grip.\(source)")
+            loadingGrip = true; grip = 4; loadingGrip = false
+            tracker.recenter(reference)
+            if let rawOrientation { saber = tracker.update(rawOrientation, basis: value, delta: 1, smoothing: 0) }
+            calibrated = true; calibrationStep = 0; calibrationSession = nil
+            calibrationMessage = "Grip verified and saved for \(source). Recalibrate if the earbud shifts in your fingers."
+            event("CALIBRATION_COMMIT source=\(source) basis=\(value.vector)")
+            updateScene(at: now)
+        } else {
+            calibrationStep = calibrationSession?.stage.rawValue ?? 1
+            calibrationMessage = "Pose saved. Follow the next step."
+            event("CALIBRATION_CAPTURE step=\(capturedStep) source=\(source) next=\(calibrationStep)")
+        }
+    }
+
+    private func captureSimpleGripPose() {
+        guard let rawOrientation else { return }
+        guard simpleCalibration.capture(rawOrientation) else {
+            calibrationError = simpleCalibration.error
             return
         }
         calibrationError = ""
-        switch calibrationStep {
-        case 1:
-            calibrationReference = rawOrientation
-            calibrationStep = 2
-            calibrationMessage = "2 / 3 · Tilt the TOP of the grip 30–60° to your LEFT (don't just slide it). Capture left."
-            event("CALIBRATION_CAPTURE neutral source=\(source)")
-        case 2:
-            guard let reference = calibrationReference else {
-                rejectCalibration("The upright pose is missing. Choose Start over."); return
-            }
-            let vector = GripCalibration.rotationVector(reference: reference, sample: rawOrientation)
-            guard GripCalibration.assessTilt(vector).isValid else {
-                rejectCalibration(calibrationPoseHint)
-                return
-            }
-            calibrationLeft = vector
-            calibrationStep = 3
-            calibrationMessage = "3 / 3 · Return upright, then tilt the TOP 30–60° FORWARD (away from you). Capture forward."
-            event("CALIBRATION_CAPTURE left vector=\(vector)")
-        case 3:
-            guard let reference = calibrationReference, let left = calibrationLeft else {
-                rejectCalibration("One of the saved poses is missing. Choose Start over."); return
-            }
-            let forward = GripCalibration.rotationVector(reference: reference, sample: rawOrientation)
-            guard GripCalibration.assessTilt(forward, comparedTo: left).isValid else {
-                rejectCalibration(calibrationPoseHint)
-                return
-            }
-            guard let value = GripCalibration.basis(left: left, forward: forward) else {
-                rejectCalibration("These poses could not produce a grip mapping. Choose Start over.")
-                return
-            }
+        if let value = simpleCalibration.basis, let reference = simpleCalibration.reference {
             customBasis = value; hasGripCalibration = true
-            UserDefaults.standard.set(value.vector.indices.map { Double(value.vector[$0]) }, forKey: "grip.\(source)")
-            grip = 4
+            gripDefaults.set(value.vector.indices.map { Double(value.vector[$0]) }, forKey: "grip.\(source)")
+            loadingGrip = true; grip = 4; loadingGrip = false
             tracker.recenter(reference)
+            saber = tracker.update(rawOrientation, basis: value, delta: 1, smoothing: 0)
             calibrated = true; calibrationStep = 0
-            calibrationMessage = "Grip saved for \(source). Return upright and press R. Repeat if you change your grip."
-            event("Saved measured grip basis for \(source): \(value.vector)")
-        default: break
+            calibrationMessage = "\(source) AirPod calibrated. Keep using this earbud; return upright and press R."
+            event("SIMPLE_CALIBRATION_SAVED source=\(source)")
+            updateScene(at: now)
+        } else {
+            calibrationStep = simpleCalibration.step
+            calibrationMessage = calibrationStep == 2 ? "Upright saved for \(source) AirPod. Lean toward your left, then capture." : "Left tilt saved for \(source) AirPod. Return upright, then tip toward the screen and finish."
+            event("SIMPLE_CALIBRATION_CAPTURE next=\(calibrationStep) source=\(source)")
         }
     }
 
     private func loadGrip(for location: String) {
-        if let values = UserDefaults.standard.array(forKey: "grip.\(location)") as? [Double], values.count == 4,
+        loadingGrip = true
+        defer { loadingGrip = false }
+        if let values = gripDefaults.array(forKey: "grip.\(location)") as? [Double], values.count == 4,
            values.allSatisfy({ $0.isFinite }) {
             let v = SIMD4<Float>(Float(values[0]), Float(values[1]), Float(values[2]), Float(values[3]))
             if simd_length(v) > 0.1 {
@@ -608,6 +749,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     func headphoneMotionManagerDidDisconnect(_ manager: CMHeadphoneMotionManager) {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.manager === manager else { return }
+            self.interruptCalibration("AirPods disconnected. Reconnect, then choose Start over.")
             self.status = "Headphones disconnected"
             self.calibrated = false
             self.arena.invalidateInput(); self.game.invalidateInput()
