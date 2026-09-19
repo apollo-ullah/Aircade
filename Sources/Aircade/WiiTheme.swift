@@ -44,11 +44,32 @@ enum WiiTheme {
     }
 }
 
-/// The highlight sweep across the top of every Wii surface.
-private struct Gloss: ViewModifier {
+/// The glossy near-white surface every Wii panel sits on: a highlight sweep
+/// across the top 46% of the shape. This is a *surface*, drawn behind content,
+/// because a sweep laid over body text washes it out.
+struct WiiSurface: View {
     var radius: CGFloat
-    func body(content: Content) -> some View {
-        content.overlay(alignment: .top) {
+    var fill: LinearGradient = WiiTheme.panelFill
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .top) {
+                fill
+                LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.20)],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: geo.size.height * 0.46)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: radius))
+        .allowsHitTesting(false)
+    }
+}
+
+extension View {
+    /// Lays the highlight sweep *over* this view. Only for artwork — channel
+    /// banners and icons. Never put it over body text: it fades the text. Text
+    /// surfaces use `wiiPanel()`, which composites the sweep behind content.
+    func gloss(_ radius: CGFloat) -> some View {
+        overlay(alignment: .top) {
             GeometryReader { geo in
                 LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.20)],
                                startPoint: .top, endPoint: .bottom)
@@ -58,23 +79,19 @@ private struct Gloss: ViewModifier {
         }
         .clipShape(RoundedRectangle(cornerRadius: radius))
     }
-}
-
-extension View {
-    func gloss(_ radius: CGFloat) -> some View { modifier(Gloss(radius: radius)) }
 
     func wiiPanel(radius: CGFloat = WiiTheme.panelRadius) -> some View {
-        background(WiiTheme.panelFill, in: RoundedRectangle(cornerRadius: radius))
-            .gloss(radius)
+        background { WiiSurface(radius: radius) }
             .overlay(RoundedRectangle(cornerRadius: radius).stroke(WiiTheme.hairline, lineWidth: 1))
             .shadow(color: WiiTheme.shadow.opacity(0.10), radius: 2, y: 1)
     }
 
-    /// Translucent readout that floats over the 3D scene during play.
+    /// Translucent dark readout that floats over the 3D scene during play. Dark
+    /// on purpose: the HUD's text is white and the stage behind it is bright.
     func wiiReadout() -> some View {
         padding(.horizontal, 18).padding(.vertical, 12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.7), lineWidth: 1))
+            .background(.black.opacity(0.42), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.28), lineWidth: 1))
     }
 }
 
