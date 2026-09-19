@@ -26,7 +26,7 @@ struct PlayerChannelView: View {
                         Text("Badge profiles are offline. You can still play and set records on this Mac.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
-                }.padding(24).wiiPanel()
+                }.padding(24).frame(maxWidth: .infinity, alignment: .leading).wiiPanel()
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Best on this Mac").font(WiiTheme.display(22))
                     HStack(spacing: 50) {
@@ -81,7 +81,7 @@ struct ArcadeSettingsView: View {
                     Toggle("Neon Rush effects", isOn: $motion.game.sound)
                     Toggle("Tennis effects", isOn: $motion.tennis.sound)
                     Toggle("Practice effects", isOn: $motion.arena.sound)
-                }.padding(24).wiiPanel()
+                }.padding(24).frame(maxWidth: .infinity, alignment: .leading).wiiPanel()
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Menu pointer").font(WiiTheme.display(22))
                     Picker("Point with", selection: Binding(get: { motion.controllers.menuDevice }, set: { motion.controllers.selectMenu($0) })) {
@@ -94,7 +94,7 @@ struct ArcadeSettingsView: View {
                         Button("Recenter pointer") { motion.controllers.recenter(motion.controllers.menuDevice) }
                         Button("Controller setup") { open(.controller) }
                     }.buttonStyle(WiiButtonStyle())
-                }.padding(24).wiiPanel()
+                }.padding(24).frame(maxWidth: .infinity, alignment: .leading).wiiPanel()
                 HStack {
                     Button("Practice arena") { open(.lab) }
                     Button("Scripted game tests") { open(.scripts) }

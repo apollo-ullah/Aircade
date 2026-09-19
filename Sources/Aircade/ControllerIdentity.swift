@@ -11,7 +11,7 @@ struct EarbudIdentityCard: View {
     private var demo: Bool { source == "Simulated" || source == "Scripted" }
     private var name: String { known ? "\(source.uppercased()) AIRPOD" : demo ? (source == "Scripted" ? "SCRIPTED SABER" : "DEMO INPUT") : "NO AIRPOD YET" }
     private var mark: String { known ? String(source.prefix(1)) : demo ? "▶" : "?" }
-    private var tint: Color { isLive ? Color(red: 0.35, green: 0.93, blue: 0.91) : .orange }
+    private var tint: Color { isLive ? WiiTheme.accentDeep : Color(red: 0.75, green: 0.36, blue: 0.05) }
     var body: some View {
         HStack(spacing: 12) {
             Text(mark).font(.system(size: compact ? 19 : 30, weight: .black, design: .rounded))
@@ -19,7 +19,7 @@ struct EarbudIdentityCard: View {
                 .foregroundStyle(.black).background(tint, in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 4) {
                 Text(purpose).font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1).foregroundStyle(.secondary)
-                Text(name).font(.system(size: compact ? 13 : 21, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                Text(name).font(.system(size: compact ? 13 : 21, weight: .bold, design: .rounded)).foregroundStyle(WiiTheme.ink)
                 if let detail {
                     Text(detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 } else if !compact && known {

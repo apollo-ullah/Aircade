@@ -420,6 +420,6 @@ struct ControllerSourceStatus: View {
                     Button("Use \(motion.incomingSource) AirPod instead") { motion.adoptIncomingSource() }
                 }
             }
-        }.foregroundStyle(motion.sourceMismatch ? Color.orange : Color(red: 0.35, green: 0.93, blue: 0.91))
+        }.foregroundStyle(motion.sourceMismatch ? Color.orange : WiiTheme.ink)
     }
 }
