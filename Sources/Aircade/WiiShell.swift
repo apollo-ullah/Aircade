@@ -44,6 +44,7 @@ struct WiiShell: View {
             }
             .onAppear {
                 if route == .lab { motion.showLab(true, notify: false) }
+                if route == .home { WiiAudio.shared.startMusic() }
             }
         }
     }
@@ -84,6 +85,8 @@ struct WiiShell: View {
         // Entering or leaving a channel pauses a running game, matching how the
         // existing sheets already behave.
         if next != .neonRush { motion.game.pause("Aircade menu is open.") }
+        WiiAudio.shared.play(next == .home ? .close : .open)
+        if next == .home { WiiAudio.shared.startMusic() } else { WiiAudio.shared.stopMusic() }
         withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) { route = next }
         let wantLab = next == .lab
         if motion.showingLab != wantLab { motion.showLab(wantLab, notify: false) }

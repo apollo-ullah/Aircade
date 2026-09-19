@@ -74,10 +74,17 @@ struct ChannelGrid: View {
             .coordinateSpace(name: "grid")
             .onPreferenceChange(ChannelFramesKey.self) { frames = $0 }
             .onChange(of: pointer.unitPoint) {
-                hovered = ChannelCatalog.channel(at: pointer.unitPoint, frames: frames, in: geo.size)
+                let next = ChannelCatalog.channel(at: pointer.unitPoint, frames: frames, in: geo.size)
+                if next != hovered {
+                    hovered = next
+                    if next != nil { WiiAudio.shared.play(.hover) }
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .wiiPointerFlick)) { _ in
-                if let hovered { open(hovered) }
+                if let hovered {
+                    WiiAudio.shared.play(.select)
+                    open(hovered)
+                }
             }
         }
         .background(WiiTheme.stage)
