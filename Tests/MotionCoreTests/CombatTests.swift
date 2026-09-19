@@ -63,4 +63,22 @@ final class CombatTests: XCTestCase {
         let b = GripCalibration.rotationVector(reference: identity, sample: simd_quatf(vector: -q.vector))
         XCTAssertLessThan(simd_distance(a, b), 0.001)
     }
+
+    func testCalibrationExplainsInsufficientAndExcessiveTilt() {
+        XCTAssertEqual(GripCalibration.assessTilt(SIMD3(0, 0, 0.1)).issue, .tooSmall)
+        XCTAssertEqual(GripCalibration.assessTilt(SIMD3(0, 0, 2)).issue, .tooLarge)
+        XCTAssertEqual(GripCalibration.assessTilt(SIMD3(.nan, 0, 0)).issue, .invalid)
+    }
+
+    func testFinalPoseExplainsRepeatedAxisIncludingOppositeTilt() {
+        let left = SIMD3<Float>(0, 0, .pi / 4)
+        XCTAssertEqual(GripCalibration.assessTilt(left, comparedTo: left).issue, .sameAxis)
+        XCTAssertEqual(GripCalibration.assessTilt(-left, comparedTo: left).issue, .sameAxis)
+        let forward = SIMD3<Float>(-.pi / 4, 0, 0)
+        let good = GripCalibration.assessTilt(forward, comparedTo: left)
+        XCTAssertTrue(good.isValid)
+        XCTAssertEqual(good.degrees, 45, accuracy: 0.01)
+        XCTAssertEqual(good.separationDegrees!, 90, accuracy: 0.01)
+        XCTAssertNotNil(GripCalibration.basis(left: left, forward: forward))
+    }
 }
