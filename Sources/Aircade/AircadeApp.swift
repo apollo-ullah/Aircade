@@ -60,6 +60,8 @@ struct AircadeApp: App {
                         motion.start()
                         motion.openCalibrationWhenReady = true
                     } else if CommandLine.arguments.contains("--live-test") { motion.start() }
+                    if CommandLine.arguments.contains("--multiplayer") { motion.showMultiplayer(true) }
+                    if CommandLine.arguments.contains("--duel-smoke") { DuelSmoke.run(motion) }
                     if CommandLine.arguments.contains("--scripted-repro") { ScriptedGameCheck.run(motion, reproduce: true) }
                     if CommandLine.arguments.contains("--scripted-game-test") { ScriptedGameCheck.run(motion) }
                     if CommandLine.arguments.contains("--scripted-demo") { motion.startScripted(.perfectRun) }
@@ -94,20 +96,31 @@ struct AircadeApp: App {
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    if motion.showingMultiplayer { motion.multiplayer.close() }
                     motion.stop(); motion.camera.stop()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                    if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") {
+                    if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") {
                         motion.game.pause("Paused while Aircade was in the background.")
+                        if motion.showingMultiplayer { motion.multiplayer.pause("Paused while Aircade was in the background.") }
                     }
                 }
         }
         .defaultSize(width: 1340, height: 900)
         .commands {
             CommandGroup(after: .newItem) {
-                Button("Recenter Saber") { motion.recenter() }.keyboardShortcut("r", modifiers: [])
+                Button("Recenter Saber") {
+                    if motion.showingMultiplayer { motion.multiplayer.pause("Player 1 recentered. Hold both controllers upright, then resume.") }
+                    motion.recenter()
+                }.keyboardShortcut("r", modifiers: [])
                 Button("Play / Pause") {
-                    if motion.showingLab { motion.arena.launchAttack() }
+                    if motion.showingMultiplayer {
+                        let duel = motion.multiplayer
+                        if duel.match.phase == .paused { duel.resume() }
+                        else if duel.match.phase == .lobby || duel.match.phase == .results { duel.start() }
+                        else { duel.pause() }
+                    }
+                    else if motion.showingLab { motion.arena.launchAttack() }
                     else if motion.game.state.phase == .paused { motion.game.resume() }
                     else if motion.game.state.phase == .menu || motion.game.state.phase == .results { motion.game.start(demo: motion.simulated) }
                     else { motion.game.pause() }
@@ -122,7 +135,8 @@ struct ContentView: View {
     @ObservedObject var motion: MotionModel
     var body: some View {
         Group {
-            if motion.showingLab { ArenaLayout(motion: motion, arena: motion.arena, camera: motion.camera) }
+            if motion.showingMultiplayer { MultiplayerView(motion: motion, duel: motion.multiplayer) }
+            else if motion.showingLab { ArenaLayout(motion: motion, arena: motion.arena, camera: motion.camera) }
             else { NeonRushView(motion: motion, game: motion.game) }
         }
     }

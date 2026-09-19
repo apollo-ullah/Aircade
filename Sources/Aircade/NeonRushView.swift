@@ -58,6 +58,8 @@ struct NeonRushView: View {
                 Text("Motion sports, in your hands.").font(.system(size: 14, weight: .medium, design: .default)).foregroundStyle(.secondary)
                 Spacer()
                 connectionPill
+                Button { motion.showMultiplayer(true) } label: { Label("Saber Duel · 2 players", systemImage: "person.2.fill") }
+                    .buttonStyle(SportsButtonStyle(primary: true))
                 Button { showingSetup = true } label: { Label("Controller", systemImage: "airpodspro") }
                     .buttonStyle(SportsButtonStyle())
             }.padding(.horizontal, 34).padding(.vertical, 20).background(.white.opacity(0.96))

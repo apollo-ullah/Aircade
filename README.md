@@ -1,6 +1,6 @@
 # Aircade — Neon Rush
 
-Native macOS arcade: **hold an AirPod, swing a saber, and survive a 60-second neon rush**. Includes the original slash/parry test lab and optional webcam hand position.
+Native macOS arcade: **hold an AirPod, swing a saber, and survive a 60-second neon rush**. Includes a two-player **Saber Duel** (AirPod + iPhone), the original slash/parry test lab, and optional webcam hand position in single player.
 SwiftUI + SceneKit + Core Motion. No third-party dependencies. macOS 14+, Xcode / Swift 5.9+.
 
 ## Launch
@@ -12,6 +12,16 @@ SwiftUI + SceneKit + Core Motion. No third-party dependencies. macOS 14+, Xcode 
 This builds and ad-hoc signs `build/Aircade.app` with the required motion permission description.
 Open that app bundle rather than running `swift run`: permission prompts need the bundled identity.
 For editing in Xcode, open `Package.swift`; use the script to launch the correctly bundled app.
+
+## Saber Duel · two controllers
+
+Choose **Saber Duel · 2 players** on the launcher. Player 1 uses the Mac's active AirPod with its existing grip calibration. Player 2 uses an iPhone's own motion sensor through the native companion app. Install and pair it using [the iPhone setup guide](iOS/README.md). You must select your development team in Xcode before installing the companion on a physical phone; no signing identity is included.
+
+The Mac hosts a six-digit-code lobby, two independently colored sabers, swept blade/target and blade/blade collision, five health points each, a 60-second limit, countdown, pause/reconnect, winner/draw, and rematch. The phone supplies distinct hit/clash/damage/result haptic cues. Hilt positions are fixed; tilt to aim and swing. Camera translation is not used in this duel. The existing AirPod calibration stays unchanged.
+
+**Watch scripted duel** runs the actual physics through a full winning match without controllers; it is labelled simulated and does not verify physical hardware. For reproducible native UI/scene capture, close other Aircade instances and launch `open build/Aircade.app --args --duel-smoke`.
+
+One AirPods pair supplies **one** public Core Motion stream at a time. Left/right sensor location is reported, not selectable by the app. A future turn-based bowling/golf mode could share the active earbud or wait for a verified system handover. This build does not implement two simultaneous earbuds from one pair, turn-based games, or more than two player slots.
 
 ## Play Neon Rush
 

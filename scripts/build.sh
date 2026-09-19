@@ -19,6 +19,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>NSHighResolutionCapable</key><true/>
 <key>NSCameraUsageDescription</key><string>Aircade tracks your controller hand locally to move the saber sideways and vertically. Camera frames are not saved or uploaded.</string>
 <key>NSMotionUsageDescription</key><string>Aircade uses AirPods motion to control your saber and test handheld tracking. Motion logs stay on this Mac.</string>
+<key>NSLocalNetworkUsageDescription</key><string>Aircade connects to your iPhone on the local network so it can control player 2.</string>
+<key>NSBonjourServices</key><array><string>_aircade._tcp</string></array>
 </dict></plist>
 PLIST
 codesign --force --sign - "$APP"

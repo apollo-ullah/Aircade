@@ -1,5 +1,18 @@
 # Verification — 2026-09-19
 
+## Saber Duel and iPhone controller — latest
+
+Implemented a two-player duel using one existing Mac AirPod stream and one independent iPhone motion stream. Added a native iOS companion project, local Bonjour/TCP pairing, fixed-position dual sabers, swept target strikes and crossed-blade parries, five health each, countdown, 60-second results, reconnect/pause, rematch, and iPhone haptic cues. Existing simple AirPod calibration is unchanged.
+
+- **All 71 automated checks passed in the final full suite:** 48 MotionCore, two transport, and 21 app integration tests. New coverage includes independent controller identity, old/duplicate/wrong-session packets, stale sender age, phone portrait axes, stationary/slow contact, parries, full five-hit wins at 30/60 Hz, timeout draw, reconnect without phantom damage, and replay reset.
+- A real TCP loopback test exercises the shared framing protocol. An app integration test pairs a synthetic phone with the production Mac host, rejects wrong-session samples, verifies separate player orientations, and proves that stale phone input does not invalidate fresh player 1 input. These are synthetic controllers, not physical devices.
+- The native `--duel-smoke` run passed: **Blue won 5–0 after 6.37 seconds of match time** through ordinary pose-driven collision. Inspected lobby/results UI images and the independent SceneKit court capture. Cached native UI bitmaps omit Metal content, which was checked separately. Outputs: `build/duel-smoke/` (ignored by git).
+- Mac release build and signature verification passed. The iPhone project compiled and linked successfully for the physical-device iOS SDK with signing disabled.
+- **Physical AirPod + iPhone multiplayer is not yet verified.** The connected iPhone 15 Pro Max now has Developer Mode enabled. A Personal Team signing identity and device provisioning profile were created through Xcode, the signed build succeeded, and `devicectl` installed `com.adyan.aircade.controller`. Local signature checks passed and the profile includes this device. First launch was refused by iOS with a profile-trust error. After the user confirmed the developer profile on the phone, `devicectl` successfully launched the installed app. Phone UI inspection, motion feel, haptics, Wi-Fi pairing, and a real two-controller match remain physical checks; see `iOS/README.md`.
+- Current scope is two simultaneous controllers. A pair exposes one AirPod motion stream; `sensorLocation` is reporting-only. Turn-based games could share the active earbud, or adopt the other earbud after a verified system handover. Forced left/right selection, bowling/golf, and eight players are not implemented.
+
+Apple references: [headphone motion API](https://developer.apple.com/documentation/coremotion/cmheadphonemotionmanager), [one-earbud-at-a-time explanation](https://developer.apple.com/videos/play/wwdc2023/10179/), [local network privacy](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+
 ## Software checks
 
 - Release app bundle built successfully and ad-hoc signature verified.

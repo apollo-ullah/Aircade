@@ -75,6 +75,8 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     @Published var calibrationAttempt = 0
     @Published var calibrationSource = ""
     @Published var showingLab = false
+    @Published var showingMultiplayer = false
+    lazy var multiplayer = MultiplayerModel(motion: self)
     let camera = HandTracker()
     let scene = SaberScene()
     lazy var arena = TrainingArena(scene: scene)
@@ -334,6 +336,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     var hasFreshMotion: Bool {
         running && !sourceMismatch && (lastReceived.map { now - $0 < 0.25 } ?? false)
     }
+    var controllerSampleAge: Double { lastReceived.map { max(0, now - $0) } ?? 60 }
     var canAdoptIncomingSource: Bool {
         sourceMismatch && (incomingSource == "Left" || incomingSource == "Right") &&
         (lastReportedAt.map { now - $0 < 0.25 } ?? false)
@@ -582,12 +585,19 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
 
 
     func showLab(_ visible: Bool) {
+        if showingMultiplayer { multiplayer.close(); showingMultiplayer = false }
         game.leave()
         showingLab = visible
         game.enabled = !visible
         arena.enabled = visible
         if visible { arena.reset() }
         scene.setArcadeVisible(!visible)
+    }
+
+    func showMultiplayer(_ visible: Bool) {
+        game.leave(); showingLab = false; arena.enabled = false
+        showingMultiplayer = visible; game.enabled = !visible
+        if visible { multiplayer.open() } else { multiplayer.close() }
     }
 
     func startCamera() {
@@ -613,6 +623,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     }
 
     private func updateScene(at time: Double) {
+        if showingMultiplayer { return }
         let freshMotion = lastReceived.map { now - $0 < 0.25 } ?? false
         let freshHand = camera.running && camera.point != nil && now - lastHandTime < 0.25
         let ready = running && !sourceMismatch && calibrated && freshMotion && (!useCamera || freshHand) && calibrationStep == 0
