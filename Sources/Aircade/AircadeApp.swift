@@ -6,13 +6,14 @@ import SceneKit
 struct AircadeApp: App {
     @StateObject private var motion = MotionModel()
     var body: some Scene {
-        WindowGroup("Aircade · Neon Rush") {
+        WindowGroup("Aircade Sports") {
             ContentView(motion: motion)
                 .frame(minWidth: 1120, minHeight: 760)
                 .preferredColorScheme(.light)
                 .onAppear {
                     NSApp.setActivationPolicy(.regular)
                     NSApp.activate(ignoringOtherApps: true)
+                    if CommandLine.arguments.contains("--tennis-preview") { motion.selectSport(.tennis) }
                     if CommandLine.arguments.contains("--calibration-preview") || CommandLine.arguments.contains("--simple-calibration-preview") {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             var previews: [(Int, NSWindow, NSView)] = []
@@ -102,6 +103,7 @@ struct AircadeApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
                     if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") {
                         motion.game.pause("Paused while Aircade was in the background.")
+                        motion.tennis.pause("Paused while Aircade was in the background.")
                         if motion.showingMultiplayer { motion.multiplayer.pause("Paused while Aircade was in the background.") }
                     }
                 }
@@ -109,7 +111,7 @@ struct AircadeApp: App {
         .defaultSize(width: 1340, height: 900)
         .commands {
             CommandGroup(after: .newItem) {
-                Button("Recenter Saber") {
+                Button("Recenter Controller") {
                     if motion.showingMultiplayer { motion.multiplayer.pause("Player 1 recentered. Hold both controllers upright, then resume.") }
                     motion.recenter()
                 }.keyboardShortcut("r", modifiers: [])
@@ -121,7 +123,11 @@ struct AircadeApp: App {
                         else { duel.pause() }
                     }
                     else if motion.showingLab { motion.arena.launchAttack() }
-                    else if motion.game.state.phase == .paused { motion.game.resume() }
+                    else if motion.selectedSport == .tennis {
+                        if motion.tennis.state.phase == .paused { motion.tennis.resume() }
+                        else if motion.tennis.state.phase == .menu || motion.tennis.state.phase == .results { motion.tennis.start() }
+                        else { motion.tennis.pause() }
+                    } else if motion.game.state.phase == .paused { motion.game.resume() }
                     else if motion.game.state.phase == .menu || motion.game.state.phase == .results { motion.game.start(demo: motion.simulated) }
                     else { motion.game.pause() }
                 }.keyboardShortcut(.space, modifiers: [])
@@ -137,6 +143,7 @@ struct ContentView: View {
         Group {
             if motion.showingMultiplayer { MultiplayerView(motion: motion, duel: motion.multiplayer) }
             else if motion.showingLab { ArenaLayout(motion: motion, arena: motion.arena, camera: motion.camera) }
+            else if motion.selectedSport == .tennis { TennisView(motion: motion, game: motion.tennis, players: motion.players) }
             else { NeonRushView(motion: motion, game: motion.game, players: motion.players) }
         }
     }

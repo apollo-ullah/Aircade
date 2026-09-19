@@ -29,6 +29,7 @@ const players = [
 const run = (suffix, playerIndex, difficulty, score, accuracy, bestCombo, minute, scenario) => ({
   _id: `00000000-0000-4000-8000-${String(suffix).padStart(12, '0')}`,
   playerID: players[playerIndex]._id,
+  game: difficulty === 'Tennis' ? 'Tennis' : 'Neon Rush',
   difficulty,
   score,
   cuts: Math.round(score / 100),
@@ -53,6 +54,9 @@ const runs = [
   run(205, 1, 'Chill', 9100, 0.98, 42, 5, 'public-chill-best'),
   run(206, 2, 'Arcade', 4200, 0.72, 12, 6, 'public-arcade-score'),
   run(207, 2, 'Chill', 5100, 0.79, 15, 7, 'public-chill-score'),
+  run(208, 0, 'Tennis', 11400, 0.92, 11, 8, 'public-tennis-best'),
+  run(209, 1, 'Tennis', 8600, 0.84, 8, 9, 'public-tennis-score'),
+  run(210, 2, 'Tennis', 5400, 0.71, 5, 10, 'public-tennis-score'),
 ];
 
 try {

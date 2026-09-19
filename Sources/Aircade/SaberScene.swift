@@ -7,6 +7,9 @@ final class SaberScene {
     let scene = SCNScene()
     let pivot = SCNNode()
     private let bladeMaterial = SCNMaterial()
+    private let racketMaterial = SCNMaterial()
+    private let saberEquipment = SCNNode()
+    private let tennisEquipment = SCNNode()
     private var live = true
     private let targetNode = SCNNode()
     private let effects = SCNNode()
@@ -16,8 +19,11 @@ final class SaberScene {
     private var attackTarget = SIMD3<Float>.zero
     private var lastTrail: SIMD3<Float>?
     private let rushRoot = SCNNode()
+    private let tennisRoot = SCNNode()
+    private let tennisBall = SCNNode()
     private let arcadeEnvironment = SCNNode()
     private var rushNodes: [Int: SCNNode] = [:]
+    private var activeSport: AircadeSport = .neonRush
     enum ImpactKind { case cut, glance, parry, damage }
 
     init() {
@@ -58,19 +64,19 @@ final class SaberScene {
         handle.firstMaterial?.roughness.contents = 0.3
         let handleNode = SCNNode(geometry: handle)
         handleNode.position.y = -0.3
-        pivot.addChildNode(handleNode)
+        saberEquipment.addChildNode(handleNode)
         for i in 0..<6 {
             let ring = SCNTorus(ringRadius: 0.11, pipeRadius: 0.014)
             ring.firstMaterial?.diffuse.contents = NSColor.darkGray
             let node = SCNNode(geometry: ring)
             node.position.y = -0.52 + CGFloat(i) * 0.085
-            pivot.addChildNode(node)
+            saberEquipment.addChildNode(node)
         }
         // Off-centre switch makes roll visible even though the blade is cylindrical.
         let button = SCNNode(geometry: SCNSphere(radius: 0.045))
         button.geometry?.firstMaterial?.diffuse.contents = NSColor.systemOrange
         button.position = SCNVector3(0.1, -0.12, 0.035)
-        pivot.addChildNode(button)
+        saberEquipment.addChildNode(button)
 
         let blade = SCNCapsule(capRadius: 0.045, height: 2.35)
         bladeMaterial.diffuse.contents = NSColor.white
@@ -78,15 +84,26 @@ final class SaberScene {
         blade.materials = [bladeMaterial]
         let bladeNode = SCNNode(geometry: blade)
         bladeNode.position.y = 1.175
-        pivot.addChildNode(bladeNode)
+        saberEquipment.addChildNode(bladeNode)
+        pivot.addChildNode(saberEquipment)
+        buildTennisRacket()
+        pivot.addChildNode(tennisEquipment)
         scene.rootNode.addChildNode(targetNode)
         scene.rootNode.addChildNode(effects)
         scene.rootNode.addChildNode(attackNode)
         scene.rootNode.addChildNode(ghostNode)
         scene.rootNode.addChildNode(directionNode)
         scene.rootNode.addChildNode(rushRoot)
+        scene.rootNode.addChildNode(tennisRoot)
         scene.rootNode.addChildNode(arcadeEnvironment)
+        let ball = SCNSphere(radius: 0.15)
+        ball.segmentCount = 24
+        ball.firstMaterial?.diffuse.contents = NSColor(calibratedRed: 0.78, green: 0.9, blue: 0.12, alpha: 1)
+        ball.firstMaterial?.emission.contents = NSColor(calibratedRed: 0.12, green: 0.16, blue: 0.01, alpha: 1)
+        tennisBall.geometry = ball
+        tennisRoot.addChildNode(tennisBall)
         buildArcadeEnvironment()
+        setSport(.neonRush)
         setLive(false)
     }
 
@@ -191,9 +208,59 @@ final class SaberScene {
         node.simdOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: simd_normalize(delta))
         return node
     }
+    private func buildTennisRacket() {
+        let grip = SCNCylinder(radius: 0.105, height: 0.62)
+        grip.firstMaterial?.diffuse.contents = NSColor(calibratedWhite: 0.16, alpha: 1)
+        let gripNode = SCNNode(geometry: grip)
+        gripNode.position.y = -0.3
+        tennisEquipment.addChildNode(gripNode)
+        for i in 0..<5 {
+            let wrap = SCNTorus(ringRadius: 0.105, pipeRadius: 0.012)
+            wrap.firstMaterial?.diffuse.contents = NSColor(calibratedWhite: 0.82, alpha: 1)
+            let node = SCNNode(geometry: wrap)
+            node.position.y = -0.5 + CGFloat(i) * 0.1
+            tennisEquipment.addChildNode(node)
+        }
+        racketMaterial.diffuse.contents = NSColor(calibratedRed: 0.05, green: 0.48, blue: 0.72, alpha: 1)
+        racketMaterial.emission.contents = NSColor(calibratedRed: 0.01, green: 0.12, blue: 0.18, alpha: 1)
+        let shaft = SCNCapsule(capRadius: 0.045, height: 0.85)
+        shaft.materials = [racketMaterial]
+        let shaftNode = SCNNode(geometry: shaft)
+        shaftNode.position.y = 0.35
+        tennisEquipment.addChildNode(shaftNode)
+        let frame = SCNTorus(ringRadius: 0.53, pipeRadius: 0.055)
+        frame.ringSegmentCount = 48
+        frame.pipeSegmentCount = 12
+        frame.materials = [racketMaterial]
+        let frameNode = SCNNode(geometry: frame)
+        frameNode.position.y = 1.17
+        frameNode.eulerAngles.x = .pi / 2
+        frameNode.scale = SCNVector3(0.76, 1, 1.13)
+        tennisEquipment.addChildNode(frameNode)
+        for offset in stride(from: -0.36 as Float, through: 0.36, by: 0.12) {
+            tennisEquipment.addChildNode(lineNode(from: SIMD3<Float>(offset, 0.66, 0), to: SIMD3<Float>(offset, 1.68, 0), radius: 0.008, color: .white))
+        }
+        for offset in stride(from: 0.78 as Float, through: 1.56, by: 0.13) {
+            let width = 0.46 * sqrt(max(0.05, 1 - pow((offset - 1.17) / 0.58, 2)))
+            tennisEquipment.addChildNode(lineNode(from: SIMD3<Float>(-width, offset, 0), to: SIMD3<Float>(width, offset, 0), radius: 0.008, color: .white))
+        }
+    }
+    func setSport(_ sport: AircadeSport) {
+        activeSport = sport
+        saberEquipment.isHidden = sport != .neonRush
+        tennisEquipment.isHidden = sport != .tennis
+        rushRoot.isHidden = sport != .neonRush
+        tennisRoot.isHidden = sport != .tennis
+        targetNode.isHidden = true
+        directionNode.isHidden = true
+        hideAttack()
+    }
     func setArcadeVisible(_ visible: Bool) {
         arcadeEnvironment.isHidden = !visible
-        rushRoot.isHidden = !visible
+        rushRoot.isHidden = !visible || activeSport != .neonRush
+        tennisRoot.isHidden = !visible || activeSport != .tennis
+        saberEquipment.isHidden = !visible || activeSport != .neonRush
+        tennisEquipment.isHidden = !visible || activeSport != .tennis
         if visible {
             targetNode.isHidden = true
             directionNode.isHidden = true
@@ -261,6 +328,16 @@ final class SaberScene {
             box(0.12, 0.6, 31, SCNVector3(x * 1.22, -1.35, -12), NSColor(calibratedRed: 0.13, green: 0.38, blue: 0.29, alpha: 1))
         }
         for z: Float in [1.5, -12, -26] { box(8, 0.018, 0.045, SCNVector3(0, -1.6, z), .white) }
+        // Centre net shared by the tennis game and stadium backdrop.
+        box(0.09, 1.65, 0.09, SCNVector3(-4.15, -0.82, -5.4), .white)
+        box(0.09, 1.65, 0.09, SCNVector3(4.15, -0.82, -5.4), .white)
+        box(8.3, 0.055, 0.055, SCNVector3(0, -0.15, -5.4), .white)
+        for x in stride(from: -4.0 as Float, through: 4.0, by: 0.28) {
+            box(0.012, 1.25, 0.012, SCNVector3(x, -0.78, -5.4), NSColor.white.withAlphaComponent(0.7))
+        }
+        for y in stride(from: -1.38 as Float, through: -0.26, by: 0.18) {
+            box(8.05, 0.012, 0.012, SCNVector3(0, y, -5.4), NSColor.white.withAlphaComponent(0.7))
+        }
         for side: Float in [-1, 1] {
             for row in 0..<3 {
                 box(1.1, 0.3, 29, SCNVector3(side * (6 + Float(row) * 1.1), -1.35 + Float(row) * 0.38, -13), NSColor(calibratedRed: 0.69, green: 0.74, blue: 0.69, alpha: 1))
@@ -309,6 +386,19 @@ final class SaberScene {
         rushNodes = [:]
         effects.childNodes.forEach { $0.removeFromParentNode() }
         lastTrail = nil
+    }
+    func clearTennis() {
+        tennisBall.isHidden = true
+        effects.childNodes.forEach { $0.removeFromParentNode() }
+        lastTrail = nil
+    }
+    func syncTennis(ball: TennisBallFlight?, elapsed: Double) {
+        guard let ball else { tennisBall.isHidden = true; return }
+        tennisBall.isHidden = false
+        tennisBall.simdPosition = ball.position(at: elapsed)
+    }
+    func tennisImpact(at point: SIMD3<Float>, velocity: SIMD3<Float>) {
+        impact(at: point, kind: .parry, velocity: velocity)
     }
     func syncRush(targets: [RushTarget], elapsed: Double) {
         let activeIDs = Set(targets.map(\.id))
@@ -372,6 +462,7 @@ final class SaberScene {
         guard live != value else { return }
         live = value
         bladeMaterial.emission.contents = value ? NSColor.cyan : NSColor(calibratedWhite: 0.15, alpha: 1)
+        racketMaterial.emission.contents = value ? NSColor(calibratedRed: 0.04, green: 0.32, blue: 0.5, alpha: 1) : NSColor(calibratedWhite: 0.08, alpha: 1)
     }
     func flash() {
         guard live else { return }
@@ -379,6 +470,7 @@ final class SaberScene {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
             self.bladeMaterial.emission.contents = self.live ? NSColor.cyan : NSColor.darkGray
+            self.racketMaterial.emission.contents = self.live ? NSColor(calibratedRed: 0.04, green: 0.32, blue: 0.5, alpha: 1) : NSColor.darkGray
         }
     }
 }

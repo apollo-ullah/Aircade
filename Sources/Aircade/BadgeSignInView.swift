@@ -20,6 +20,7 @@ struct BadgeSignInView: View {
                     HStack(spacing: 36) {
                         profileBest("Arcade", players.bests["Arcade"])
                         profileBest("Chill", players.bests["Chill"])
+                        profileBest("Tennis", players.bests["Tennis"])
                     }
                     Text("These scores are saved to this badge profile in MongoDB.").font(.caption).foregroundStyle(.secondary)
                 }.padding(16).frame(maxWidth: .infinity, alignment: .leading).sportsPanel()

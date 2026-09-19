@@ -1,6 +1,6 @@
 # Aircade — Neon Rush
 
-Native macOS arcade: **hold an AirPod, swing a saber, and survive a 60-second neon rush**. Includes a two-player **Saber Duel** (AirPod + iPhone), the original slash/parry test lab, and optional webcam hand position in single player.
+Native macOS arcade: **hold an AirPod or iPhone and play motion-controlled games**. Includes Neon Rush, a 60-second Tennis rally challenge, two-player Saber Duel (AirPod + iPhone), and the original training lab.
 SwiftUI + SceneKit + Core Motion. No third-party dependencies. macOS 14+, Xcode / Swift 5.9+.
 
 ## Badge profiles and local MongoDB

@@ -68,7 +68,8 @@ struct NeonRushView: View {
             HStack(spacing: 18) {
                 brand
                 Rectangle().fill(SportsTheme.blue.opacity(0.25)).frame(width: 1, height: 30)
-                Text("Motion sports, in your hands.").font(.system(size: 14, weight: .medium, design: .default)).foregroundStyle(.secondary)
+                Text("Neon Rush").font(.system(size: 14, weight: .bold, design: .default)).foregroundStyle(SportsTheme.blue)
+                Button("Tennis") { motion.selectSport(.tennis) }.buttonStyle(.plain).foregroundStyle(.secondary)
                 Spacer()
                 if let player = players.player {
                     Button { players.showingSignIn = true } label: { Label(player.nickname, systemImage: "person.crop.circle.fill") }

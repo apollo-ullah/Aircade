@@ -57,6 +57,15 @@ import MotionCore
         try await wait { !restored.busy }
         try await wait { restored.bests["Arcade"] != nil }
         try check(restored.player?.id == originalID, "Rescan after logout must restore the same profile")
-        print("PASS: native profile recognition, scan gate, logout/rescan, demo exclusion, frozen run identity, offline persistence, restart/retry, per-player bests")
+        restored.beginRun(demo: false)
+        var tennis = TennisMatch()
+        let opponent = AutomaticReboundOpponent()
+        tennis.start(); tennis.advance(3, opponent: opponent); tennis.advance(0.25, opponent: opponent)
+        tennis.advance(tennis.ball!.duration, opponent: opponent)
+        _ = tennis.playerHit(speed: 2, horizontalDirection: 0)
+        restored.finishTennis(tennis, demo: false)
+        try await wait { restored.bests["Tennis"] != nil }
+        try check(restored.bests["Tennis"] == tennis.score, "Tennis best was not attached to the badge profile")
+        print("PASS: native profile recognition, scan gate, logout/rescan, demo exclusion, frozen run identity, offline persistence, restart/retry, Neon Rush and Tennis per-player bests")
     }
 }
