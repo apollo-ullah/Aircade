@@ -137,8 +137,10 @@ struct NeonRushView: View {
                         rule("×", "AVOID", "Red hazards cost one energy.", .red)
                     }.padding(22).frame(width: 300).wiiPanel()
                 }
-                Label(motion.activeInputSimulated ? "Simulated controller" : game.inputReady ? "Your saber is live" : "Your AirPods. Your controller.", systemImage: "airpodspro")
-                    .font(WiiTheme.body(12, .medium)).padding(12).wiiPanel()
+                Button { showingSetup = true } label: {
+                    ActiveControllerBadge(motion: motion, controllers: motion.controllers)
+                        .padding(12).wiiPanel()
+                }.buttonStyle(.plain)
             }.frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(24)
@@ -215,7 +217,7 @@ struct NeonRushView: View {
             if let script = motion.scriptedScenario {
                 Button("Change test") { showingScripts = true }.buttonStyle(.bordered).help(script.rawValue)
             }
-            ControllerIdentityBadge(motion: motion)
+            ActiveControllerBadge(motion: motion, controllers: motion.controllers)
             Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
             Button { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }
                 .buttonStyle(.plain).accessibilityLabel(game.sound ? "Mute sound" : "Enable sound")
@@ -264,7 +266,7 @@ struct NeonRushView: View {
             Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
-                Button("Back to Aircade") { game.leave() }
+                Button("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
                 Button("Next player") { game.leave(); players.nextPlayer() }
                 Button("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL) }
                 if motion.scriptedScenario != nil { Button("Change scripted test") { showingScripts = true } }

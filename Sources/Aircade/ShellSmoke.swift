@@ -22,7 +22,7 @@ enum ShellSmoke {
                     : index == 13 ? motion.scriptedScenario == nil : true
                 checks.append(["route": String(describing: expected),
                                "passed": motion.shellRoute == expected && activeGameCorrect && scriptCorrect && motion.controllers.phoneHost.code == code])
-                if let view = NSApp.windows.first(where: { $0.isVisible })?.contentView,
+                if let view = NSApp.windows.first(where: { $0.contentView != nil })?.contentView,
                    let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                     view.cacheDisplay(in: view.bounds, to: bitmap)
                     if let data = bitmap.representation(using: .png, properties: [:]) {

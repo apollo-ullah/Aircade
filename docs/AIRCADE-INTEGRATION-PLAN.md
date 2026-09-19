@@ -2,7 +2,7 @@
 
 Implementation and orchestration plan · September 19, 2026
 
-**Status: planned, not implemented.** This document records the next execution plan. The current AirPod/iPhone build, teammate tennis branch, and Wii-shell work remain separate. No integration is claimed by this document.
+**Status: core implementation integrated; release checks in progress.** Work is on `codex/arcade-integration` in `../Aircade-integration`. See [INTEGRATION-EXECUTION.md](INTEGRATION-EXECUTION.md) for actual commits and verification. The sections below preserve the agreed plan; physical acceptance is still required before declaring the full milestone complete.
 
 ## 1. Outcome and scope
 

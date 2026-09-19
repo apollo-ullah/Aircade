@@ -58,9 +58,15 @@ struct ChannelGrid: View {
 
     var body: some View {
         GeometryReader { geo in
+            VStack(alignment: .leading, spacing: 26) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("aircade").font(WiiTheme.display(44)).foregroundStyle(WiiTheme.accentDeep)
+                    Spacer()
+                    Text("Little controllers. Big games.").font(WiiTheme.display(18, .medium)).foregroundStyle(WiiTheme.inkSoft)
+                }
             LazyVGrid(columns: columns, spacing: 18) {
                 ForEach(ChannelCatalog.all) { channel in
-                    tile(channel)
+                    tile(channel, height: min(230, max(160, (geo.size.height - 180) / 2)))
                         .background {
                             GeometryReader { tileGeo in
                                 Color.clear.preference(
@@ -70,7 +76,9 @@ struct ChannelGrid: View {
                         }
                 }
             }
-            .padding(26)
+            }
+            .padding(.horizontal, max(26, (geo.size.width - 1160) / 2))
+            .padding(.top, 38)
             .coordinateSpace(name: "grid")
             .onPreferenceChange(ChannelFramesKey.self) { frames = $0 }
             .onChange(of: pointer.unitPoint) {
@@ -90,26 +98,26 @@ struct ChannelGrid: View {
         .background(WiiTheme.stage)
     }
 
-    private func tile(_ channel: Channel) -> some View {
+    private func tile(_ channel: Channel, height: CGFloat) -> some View {
         Button { open(channel.route) } label: {
             VStack(spacing: 0) {
                 // The sweep goes over the banner, which is artwork only. The
                 // name strip below it stays clear so the label reads crisply.
                 Image(systemName: channel.symbol)
-                    .font(.system(size: 34))
+                    .font(.system(size: 52))
                     .foregroundStyle(WiiTheme.accentDeep)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(WiiTheme.panelFill)
                     .gloss(0)
                 Text(channel.title)
-                    .font(WiiTheme.display(12, .bold))
+                    .font(WiiTheme.display(16, .bold))
                     .foregroundStyle(WiiTheme.ink)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 7)
                     .background(WiiTheme.barFill)
             }
-            .frame(height: 148)
+            .frame(height: height)
             .clipShape(RoundedRectangle(cornerRadius: WiiTheme.tileRadius))
             .overlay(RoundedRectangle(cornerRadius: WiiTheme.tileRadius)
                 .stroke(hovered == channel.route ? WiiTheme.accent : WiiTheme.hairline,

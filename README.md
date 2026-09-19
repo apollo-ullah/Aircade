@@ -1,11 +1,19 @@
-# Aircade — Neon Rush
+# Aircade
 
 Native macOS arcade: **hold an AirPod or iPhone and play motion-controlled games**. Includes Neon Rush, a 60-second Tennis rally challenge, two-player Saber Duel (AirPod + iPhone), and the original training lab.
 SwiftUI + SceneKit + Core Motion. No third-party dependencies. macOS 14+, Xcode / Swift 5.9+.
 
+## Connect once, switch games
+
+Open **Controllers** from the Wii-style home menu. Choose the solo controller, then start and calibrate the active AirPod or pair the iPhone using the six-digit code. **Tennis** and **Neon Rush** both accept either device. **Saber Duel** uses both. Moving between home, games, and setup does not disconnect or recenter either controller.
+
+Menu pointing uses the selected menu controller (change it in **air → Settings**). Point and flick to choose a channel, or use the mouse. Moving the mouse temporarily takes control. **Space** selects the hovered tile at home and pauses/resumes a game; **R** recenters the appropriate controller. **Escape / Back to menu** leaves a channel.
+
+Tennis is a 60-second arcade rally against an automatic returner. Actual racket-face contact, face direction, and swing speed affect returns. The current opponent is deterministic logic, not a trained AI service. Avatars, more than one phone, and external haptic motors are deferred.
+
 ## Badge profiles and local MongoDB
 
-Run `./scripts/start-station.sh` in a separate Terminal, then launch the app. Use **Scan badge** before physical play to create or retrieve a profile. Results are stored in local MongoDB; opted-in players appear at http://127.0.0.1:8787. Demo/scripted results are excluded. See [BADGE-STATION.md](BADGE-STATION.md) for setup, privacy, offline retries, tests, and LAN sharing.
+Run `./scripts/start-station.sh` in a separate Terminal, then launch the app. **Guest play works immediately without the server.** Optionally open **Players & scores → Sign in with a badge** to create or retrieve a profile. Results are stored in local MongoDB; opted-in players appear at http://127.0.0.1:8787. Demo/scripted results are excluded. See [BADGE-STATION.md](BADGE-STATION.md) for setup, privacy, offline retries, tests, and LAN sharing.
 
 ## Launch
 
@@ -19,7 +27,7 @@ For editing in Xcode, open `Package.swift`; use the script to launch the correct
 
 ## Saber Duel · two controllers
 
-Choose **Saber Duel · 2 players** on the launcher. Player 1 uses the Mac's active AirPod with its existing grip calibration. Player 2 uses an iPhone's own motion sensor through the native companion app. Install and pair it using [the iPhone setup guide](iOS/README.md). You must select your development team in Xcode before installing the companion on a physical phone; no signing identity is included.
+Choose **Saber Duel** in the Wii-style channel menu. Use one active AirPod and one iPhone; either can be Player 1. The other becomes Player 2. Pair in **Controllers** once and keep the connection across games. Install and pair it using [the iPhone setup guide](iOS/README.md). You must select your development team in Xcode before installing the companion on a physical phone; no signing identity is included.
 
 The Mac hosts a six-digit-code lobby, two independently colored sabers, swept blade/target and blade/blade collision, five health points each, a 60-second limit, countdown, pause/reconnect, winner/draw, and rematch. The phone supplies distinct hit/clash/damage/result haptic cues. Hilt positions are fixed; tilt to aim and swing. Camera translation is not used in this duel. The existing AirPod calibration stays unchanged.
 
@@ -29,7 +37,7 @@ One AirPods pair supplies **one** public Core Motion stream at a time. Left/righ
 
 ## Play Neon Rush
 
-1. Click **Connect your controller** or **Controller**. Turn off **Automatic Ear Detection**, hold the earbud in your calibrated grip, and click **Start AirPods**.
+1. Open **Neon Rush → Connect your controller**, or **Controllers** from home. Choose **AirPod** or **iPhone** under **Play with**. For AirPods: Turn off **Automatic Ear Detection**, hold the earbud in your calibrated grip, and click **Start AirPods**.
 2. The controller label identifies the selected earbud. Its saved grip loads automatically. Use grip setup if the grip has changed. Hold upright and press **R** to recenter, then close setup.
 3. Select **Chill** (seven energy, generous windows, free-direction cuts) or **Arcade** (five energy, tighter windows, directional cuts from round two). Click **Let's play**.
 4. After the countdown, wait for blocks to reach your blade. Slice green ✦ blocks in any direction; cut cyan arrows in the indicated direction. Avoid touching red × hazards with the blade. Keep clear of hazards until they disappear.
@@ -44,7 +52,7 @@ Brief AirPod packet gaps recover automatically: after 250 ms without motion, the
 
 ## Test without AirPods
 
-Choose **Scripted saber tests** at the bottom of the launcher, select a scenario, then **Run scripted test**. The script supplies blade poses through the real collision, scoring, effects, and round code. It never injects scores or successful hits. **Change test** during play (or **Change scripted test** on results) opens the selector; **Use AirPods instead** reconnects real motion with your saved grip.
+Choose **air (Settings) → Scripted game tests**, select a scenario, then **Run scripted test**. The script supplies blade poses through the real collision, scoring, effects, and round code. It never injects scores or successful hits. **Change test** during play (or **Change scripted test** on results) opens the selector; **Use AirPods instead** reconnects real motion with your saved grip.
 
 | Scenario | Expected behavior |
 | --- | --- |
@@ -60,7 +68,7 @@ Scripted sessions are labelled and do not save high scores or replace grip calib
 
 ## Calibrate and use the test lab
 
-1. Choose **Open test lab** from the launcher. Disable **Automatic Ear Detection** for your AirPods (the user confirmed this enables handheld streaming on their setup), and click **Start AirPods**.
+1. Choose **Practice** from the channel menu. Disable **Automatic Ear Detection** for your AirPods (the user confirmed this enables handheld streaming on their setup), and click **Start AirPods**.
 2. Check the large **L / LEFT AIRPOD** or **R / RIGHT AIRPOD** badge in **SIMPLE CALIBRATION**. This names the earbud being calibrated, not the hand holding it or the tilt direction. Hold the earbud marked L/R in either hand. The same controller badge appears on the home screen, during play, in setup, and in the lab. The app currently uses the early three-capture flow:
    - Hold your imaginary handle upright and click **Save upright**.
    - Lean it left and click **Save left tilt**. A small tilt is accepted.

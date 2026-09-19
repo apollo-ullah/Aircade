@@ -60,9 +60,9 @@ struct TennisView: View {
                     Button { players.showingSignIn = true } label: { Label(player.nickname, systemImage: "person.crop.circle.fill") }.buttonStyle(WiiButtonStyle())
                     Button("Log out") { players.logout() }.buttonStyle(WiiButtonStyle())
                 } else {
-                    Button("Scan badge") { players.showingSignIn = true }.buttonStyle(WiiButtonStyle())
+                    Button("Scan badge") { players.showingSignIn = true }.buttonStyle(WiiButtonStyle()).disabled(!players.profilesAvailable)
                 }
-                Button { NSWorkspace.shared.open(players.leaderboardURL) } label: { Image(systemName: "trophy") }.help("Open leaderboard")
+                Button { NSWorkspace.shared.open(players.leaderboardURL) } label: { Image(systemName: "trophy") }.help("Open leaderboard").disabled(!players.profilesAvailable)
                 ActiveControllerBadge(motion: motion, controllers: motion.controllers)
                 Button { showingSetup = true } label: { Label("Controller", systemImage: "airpodspro") }.buttonStyle(WiiButtonStyle())
             }.padding(.horizontal, 34).padding(.vertical, 20).background(.white.opacity(0.96))
@@ -198,7 +198,7 @@ struct TennisView: View {
             Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
             HStack(spacing: 24) {
-                Button("Back to Aircade") { game.leave() }
+                Button("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
                 Button("Next player") { game.leave(); players.nextPlayer() }
                 Button("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL) }
             }.buttonStyle(.plain).foregroundStyle(.secondary)
