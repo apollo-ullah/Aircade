@@ -52,6 +52,7 @@ final class PlayerSession: ObservableObject {
     }
     var leaderboardURL: URL { URL(string: configuration?.url ?? "") ?? URL(string: "http://127.0.0.1:8787")! }
     var pendingRuns: [BadgeRun] { pending }
+    var profilesAvailable: Bool { configuration != nil }
 
     init(queueDirectory: URL? = nil, automaticRetry: Bool = true, uploadOnFinish: Bool = true,
          configurationProvider: @escaping () -> StationConfiguration? = PlayerSession.loadConfiguration,

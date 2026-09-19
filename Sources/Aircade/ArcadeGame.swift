@@ -127,6 +127,7 @@ final class ArcadeGame: ObservableObject {
         guard time.isFinite, time >= lastInput else { return }
         inputReady = true; lastInput = time
         guard state.phase == .playing else { previousPose = nil; previousTime = nil; return }
+        if let previousTime, time <= previousTime { return }
         defer { previousPose = pose; previousTime = time }
         // The first returning pose is a new baseline, never a slash across the gap.
         guard !recoveringInput else { return }

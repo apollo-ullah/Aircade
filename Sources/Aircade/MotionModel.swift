@@ -77,6 +77,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     @Published var calibrationAttempt = 0
     @Published var calibrationSource = ""
     @Published var showingLab = false
+    @Published var shellRoute: Route = .home
     @Published var showingMultiplayer = false
     lazy var controllers = ControllerSession(clock: { [weak self] in self?.now ?? ProcessInfo.processInfo.systemUptime })
     lazy var multiplayer = MultiplayerModel(controllers: controllers)
@@ -256,7 +257,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     func startScripted(_ scenario: SaberScript) {
         stop()
         selectedSport = .neonRush
-        showLab(false)
+        showLab(false, notify: false)
         useCamera = false; simulated = true; running = true; calibrated = true
         scriptedScenario = scenario; scriptController = ScriptedSaber(scenario)
         source = "Simulated"; incomingSource = "Simulated"
@@ -607,7 +608,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     }
 
 
-    func showLab(_ visible: Bool) {
+    func showLab(_ visible: Bool, notify: Bool = true) {
         if showingMultiplayer { multiplayer.close(); showingMultiplayer = false }
         game.leave()
         tennis.leave()
@@ -619,17 +620,22 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         if visible { arena.reset() }
         if !visible { scene.setSport(selectedSport) }
         scene.setArcadeVisible(!visible)
+        if notify {
+            NotificationCenter.default.post(name: .wiiRouteRequest,
+                                            object: visible ? Route.lab : Route.home)
+        }
     }
 
-    func showMultiplayer(_ visible: Bool) {
+    func showMultiplayer(_ visible: Bool, notify: Bool = true) {
         game.leave(); tennis.leave(); lastRoutedSample = nil; showingLab = false; arena.enabled = false
         showingMultiplayer = visible
         game.enabled = !visible && selectedSport == .neonRush
         tennis.enabled = !visible && selectedSport == .tennis
         if visible { multiplayer.open() } else { multiplayer.close() }
+        if notify { NotificationCenter.default.post(name: .wiiRouteRequest, object: visible ? Route.duel : Route.home) }
     }
 
-    func selectSport(_ sport: AircadeSport) {
+    func selectSport(_ sport: AircadeSport, notify: Bool = true) {
         guard !showingLab else { return }
         if showingMultiplayer { multiplayer.close(); showingMultiplayer = false }
         game.leave()
@@ -641,6 +647,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         scene.setSport(sport)
         scene.setArcadeVisible(true)
         updateScene(at: now)
+        if notify { NotificationCenter.default.post(name: .wiiRouteRequest, object: sport == .tennis ? Route.tennis : Route.neonRush) }
     }
 
     func startCamera() {
@@ -730,7 +737,11 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
 
     var activeControllerName: String { controllers.name(for: controllers.soloDevice) }
     var activeInputSimulated: Bool { controllers.soloDevice == .airPod ? simulated : (controllers.snapshot(for: .phone)?.simulated ?? false) }
-    func recenterSelectedController() { controllers.recenter(showingLab ? .airPod : controllers.soloDevice) }
+    func recenterSelectedController() {
+        let selected = showingMultiplayer ? (controllers.device(for: .one) ?? .airPod)
+            : showingLab ? .airPod : shellRoute == .home ? controllers.menuDevice : controllers.soloDevice
+        controllers.recenter(selected)
+    }
     func startControllerSession() { controllers.start() }
     func shutdownControllerSession() { controllers.shutdown() }
 

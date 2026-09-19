@@ -150,6 +150,7 @@ final class TennisGame: ObservableObject {
         inputReady = true
         lastInput = time
         guard state.phase == .playing else { previousPose = nil; previousTime = nil; previousBall = nil; return }
+        if let previousTime, time <= previousTime { return }
         defer {
             previousPose = pose; previousTime = time
             previousBall = state.ball.flatMap { $0.direction == .towardPlayer ? ($0.id, $0.position(at: state.elapsed)) : nil }

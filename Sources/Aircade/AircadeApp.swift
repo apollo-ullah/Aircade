@@ -65,6 +65,7 @@ struct AircadeApp: App {
                     if CommandLine.arguments.contains("--multiplayer") { motion.showMultiplayer(true) }
                     if CommandLine.arguments.contains("--duel-smoke") { DuelSmoke.run(motion) }
                     if CommandLine.arguments.contains("--tennis-smoke") { TennisSmoke.run(motion) }
+                    if CommandLine.arguments.contains("--shell-smoke") { ShellSmoke.run(motion) }
                     if CommandLine.arguments.contains("--scripted-repro") { ScriptedGameCheck.run(motion, reproduce: true) }
                     if CommandLine.arguments.contains("--scripted-game-test") { ScriptedGameCheck.run(motion) }
                     if CommandLine.arguments.contains("--scripted-demo") { motion.startScripted(.perfectRun) }
@@ -103,7 +104,7 @@ struct AircadeApp: App {
                     motion.shutdownControllerSession(); motion.stop(); motion.camera.stop()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-                    if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") && !CommandLine.arguments.contains("--tennis-smoke") {
+                    if !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") && !CommandLine.arguments.contains("--tennis-smoke") && !CommandLine.arguments.contains("--shell-smoke") {
                         motion.game.pause("Paused while Aircade was in the background.")
                         motion.tennis.pause("Paused while Aircade was in the background.")
                         if motion.showingMultiplayer { motion.multiplayer.pause("Paused while Aircade was in the background.") }
@@ -118,6 +119,11 @@ struct AircadeApp: App {
                     motion.recenterSelectedController()
                 }.keyboardShortcut("r", modifiers: [])
                 Button("Play / Pause") {
+                    if motion.shellRoute == .home {
+                        NotificationCenter.default.post(name: .wiiPointerFlick, object: nil)
+                        return
+                    }
+                    guard [.neonRush, .tennis, .duel, .lab].contains(motion.shellRoute) else { return }
                     if motion.showingMultiplayer {
                         let duel = motion.multiplayer
                         if duel.match.phase == .paused { duel.resume() }
@@ -142,12 +148,7 @@ struct AircadeApp: App {
 struct ContentView: View {
     @ObservedObject var motion: MotionModel
     var body: some View {
-        Group {
-            if motion.showingMultiplayer { MultiplayerView(motion: motion, duel: motion.multiplayer) }
-            else if motion.showingLab { ArenaLayout(motion: motion, arena: motion.arena, camera: motion.camera) }
-            else if motion.selectedSport == .tennis { TennisView(motion: motion, game: motion.tennis, players: motion.players) }
-            else { NeonRushView(motion: motion, game: motion.game, players: motion.players) }
-        }
+        WiiShell(motion: motion)
     }
 }
 
@@ -156,7 +157,7 @@ struct ArenaLayout: View {
     @ObservedObject var arena: TrainingArena
     @ObservedObject var camera: HandTracker
     @State private var panel = 0
-    private let cyan = SportsTheme.blue
+    private let cyan = WiiTheme.accentDeep
 
     var body: some View {
         VStack(spacing: 0) {
@@ -223,7 +224,7 @@ struct ArenaLayout: View {
                     }
                 }.frame(width: 390)
             }
-        }.background(SportsTheme.paper)
+        }.background(WiiTheme.stageMid)
         .sheet(isPresented: Binding(get: { motion.calibrationStep > 0 }, set: { showing in
             if !showing && motion.calibrationStep > 0 { motion.cancelGripCalibration() }
         })) {

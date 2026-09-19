@@ -39,7 +39,7 @@ struct ControllerSelectionPanel: View {
                     HStack {
                         Button(motion.running ? "Reconnect AirPods" : "Start AirPods") { motion.start() }
                         Button("Recenter") { controllers.recenter(.airPod) }.disabled(!motion.hasFreshMotion)
-                    }.buttonStyle(SportsButtonStyle())
+                    }.buttonStyle(WiiButtonStyle())
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 Divider()
                 VStack(alignment: .leading, spacing: 10) {
@@ -50,7 +50,7 @@ struct ControllerSelectionPanel: View {
                         HStack {
                             Button("Recenter iPhone") { controllers.recenter(.phone) }
                             Button("Unpair") { controllers.forgetPhone() }
-                        }.buttonStyle(SportsButtonStyle())
+                        }.buttonStyle(WiiButtonStyle())
                     } else {
                         Text("Open Aircade Controller on your phone, select this Mac, and enter:")
                             .font(.caption).foregroundStyle(.secondary)
@@ -60,7 +60,7 @@ struct ControllerSelectionPanel: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.fixedSize(horizontal: false, vertical: true)
-        }.padding(20).sportsPanel()
+        }.padding(20).wiiPanel()
             .onAppear { motion.startControllerSession() }
     }
 }
@@ -71,7 +71,7 @@ struct ActiveControllerBadge: View {
     var body: some View {
         let device = controllers.soloDevice
         Label(controllers.readiness(for: device), systemImage: device == .phone ? "iphone" : "airpodspro")
-            .font(.caption.weight(.semibold)).foregroundStyle(SportsTheme.blue)
+            .font(.caption.weight(.semibold)).foregroundStyle(WiiTheme.accentDeep)
             .accessibilityLabel("Selected controller: \(controllers.name(for: device)). \(controllers.readiness(for: device))")
     }
 }

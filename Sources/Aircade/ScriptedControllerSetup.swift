@@ -30,6 +30,6 @@ struct ScriptedControllerSetup: View {
                 }.buttonStyle(.borderedProminent).tint(.cyan).foregroundStyle(.black).controlSize(.large)
             }
         }.padding(26).frame(width: 560)
-            .background(Color(red: 0.035, green: 0.045, blue: 0.07)).preferredColorScheme(.dark)
+            .background(WiiTheme.stageMid).preferredColorScheme(.light)
     }
 }
