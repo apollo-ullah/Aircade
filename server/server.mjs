@@ -18,6 +18,11 @@ await mongo.connect();
 const db = mongo.db(process.env.MONGODB_DB || 'aircade');
 const players = db.collection('players'), runs = db.collection('runs');
 await players.createIndex({ badgeKey: 1 }, { unique: true });
+await players.createIndex({ nickname: 1 }, {
+  name: 'public_nickname_unique', unique: true,
+  partialFilterExpression: { isPublic: true, nameConfirmed: true },
+  collation: { locale: 'en', strength: 2 }
+});
 await runs.createIndex({ playerID: 1, game: 1, difficulty: 1, score: -1 });
 const app = express();
 app.disable('x-powered-by');
@@ -295,8 +300,15 @@ app.post('/api/sign-in', auth, asyncRoute(async (req, res) => {
 }));
 app.patch('/api/players/:id', auth, asyncRoute(async (req, res) => {
   const { nickname, isPublic } = req.body;
-  if (!validID(req.params.id) || typeof nickname !== 'string' || nickname.trim().length < 2 || nickname.trim().length > 24 || /[\x00-\x1f\x7f]/.test(nickname) || typeof isPublic !== 'boolean') return res.status(400).json({ error: 'Use a 2–24 character nickname and choose leaderboard visibility' });
-  const p = await players.findOneAndUpdate({ _id: req.params.id }, { $set: { nickname: nickname.trim(), isPublic, nameConfirmed: true } }, { returnDocument: 'after' });
+  const cleanNickname = typeof nickname === 'string' ? nickname.normalize('NFKC').trim().replace(/\s+/g, ' ') : '';
+  if (!validID(req.params.id) || typeof nickname !== 'string' || cleanNickname.length < 2 || cleanNickname.length > 24 || /[\x00-\x1f\x7f]/.test(nickname) || typeof isPublic !== 'boolean') return res.status(400).json({ error: 'Use a 2–24 character nickname and choose leaderboard visibility' });
+  let p;
+  try {
+    p = await players.findOneAndUpdate({ _id: req.params.id }, { $set: { nickname: cleanNickname, isPublic, nameConfirmed: true } }, { returnDocument: 'after' });
+  } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ error: 'That public nickname is already in use. Scan the original badge or choose a unique nickname.' });
+    throw error;
+  }
   if (!p) return res.status(404).json({ error: 'Player not found' });
   res.json(publicPlayer(p));
 }));

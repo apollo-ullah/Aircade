@@ -64,7 +64,8 @@ test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards'
     assert.equal((await request('/api/sign-in', 'POST', { badgeDigest: digest })).body.id, a.id);
     const parallel = await Promise.all(Array.from({ length: 8 }, () => request('/api/sign-in', 'POST', { badgeDigest: 'a'.repeat(64) })));
     assert.equal(new Set(parallel.map(r => r.body.id)).size, 1);
-    assert.equal((await request('/api/players/' + a.id, 'PATCH', { nickname: 'Test Player', isPublic: true })).status, 200);
+    const named = await request('/api/players/' + a.id, 'PATCH', { nickname: '  Test   Player  ', isPublic: true });
+    assert.equal(named.status, 200); assert.equal(named.body.nickname, 'Test Player');
     const run = { id: randomUUID(), playerID: a.id, difficulty: 'Arcade', score: 900, cuts: 6, bestCombo: 6, accuracy: 100, completed: true, isDemo: false, gameVersion: 'test' };
     assert.equal((await request('/api/runs', 'POST', { ...run, isDemo: true })).status, 400);
     assert.equal((await request('/api/runs', 'POST', { ...run, score: -1 })).status, 400);
@@ -76,6 +77,8 @@ test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards'
     await request('/api/runs', 'POST', { ...run, id: randomUUID(), difficulty: 'Chill', score: 1200 });
     await request('/api/runs', 'POST', { ...run, id: randomUUID(), game: 'Tennis', difficulty: 'Tennis', score: 1800, cuts: 9, bestCombo: 5, accuracy: 90 });
     const privatePlayer = (await request('/api/sign-in', 'POST', { badgeDigest: 'b'.repeat(64) })).body;
+    const duplicateName = await request('/api/players/' + privatePlayer.id, 'PATCH', { nickname: 'test player', isPublic: true });
+    assert.equal(duplicateName.status, 409); assert.match(duplicateName.body.error, /already in use/);
     await request('/api/runs', 'POST', { ...run, id: randomUUID(), playerID: privatePlayer.id, score: 5000 });
     const board = (await request('/api/leaderboard', 'GET', undefined, false)).body;
     assert.equal(board.rows.length, 1); assert.equal(board.rows[0].score, 900); assert.equal(board.rows[0].rank, 1);
