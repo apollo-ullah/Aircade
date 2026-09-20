@@ -276,15 +276,22 @@ struct TennisView: View {
             if !canStartRally {
                 MotionButton("Reconnect model rival") { game.prepareOpponent() }.buttonStyle(WiiButtonStyle())
             }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
-                MotionButton("Next player") { game.leave(); players.nextPlayer() }
-                if !game.liveReady { MotionButton("Connect controller") { showingSetup = true } }
-                MotionButton("Leaderboard") {
+            HStack(spacing: 12) {
+                resultNavigationButton("Back to Aircade", symbol: "square.grid.2x2.fill") {
+                    NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home)
+                }
+                resultNavigationButton("Leaderboard", symbol: "trophy.fill") {
                     players.selectLeaderboard("Tennis")
                     NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.profile)
                 }
-            }.buttonStyle(WiiButtonStyle())
+                resultNavigationButton("Next player", symbol: "person.crop.circle.badge.plus") {
+                    game.leave()
+                    players.nextPlayer()
+                }
+            }
+            if !game.liveReady {
+                resultNavigationButton("Connect controller", symbol: "gamecontroller.fill") { showingSetup = true }
+            }
         }
     }
 
@@ -293,6 +300,13 @@ struct TennisView: View {
     }
     private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {
         MotionButton(action: action) { GamePrimaryAction(title: title, accent: courtBlue) }.buttonStyle(GameActionStyle())
+    }
+    private func resultNavigationButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        MotionButton(action: action) {
+            Label(title, systemImage: symbol).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(WiiButtonStyle())
+        .frame(maxWidth: .infinity)
     }
     private func stat(_ value: String, _ label: String) -> some View {
         GameMetric(value: value, label: label)
