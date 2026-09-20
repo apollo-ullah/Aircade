@@ -6,8 +6,9 @@ This is the release checklist for the submitted Aircade build. The code is froze
 
 - [x] Consolidated the judging implementation with the public README history.
 - [x] Native release build completed and the app bundle was ad-hoc signed.
-- [x] Native test suite passed: 126 tests executed, 2 opt-in live tests skipped, 0 failures.
+- [x] Native test suite passed: 127 tests executed, 2 opt-in live tests skipped, 0 failures.
 - [x] Every real Tennis rally now opens a polished hacker-badge prompt, starts the authorized camera automatically, and offers an explicit guest skip; demo rallies remain clearly unranked.
+- [x] Leaderboard actions stay inside Aircade and preserve the selected Tennis or Neon Rush board.
 - [x] Full station suite passed: 25/25 tests, including isolated MongoDB and Baseten integration checks. The offline subset also passed 23/23.
 - [x] Both OpenAI and AI Gateway credentials are present in the ignored local environment without being printed.
 - [x] The configured station is responding on port 8794 with the `tactical-v1` contract.

@@ -38,6 +38,7 @@ final class PlayerSession: ObservableObject {
     @Published private(set) var leaderboards: [String: LeaderboardBoard] = [:]
     @Published private(set) var standings: [String: LeaderboardStanding] = [:]
     @Published private(set) var leaderboardStatus: [String: String] = [:]
+    @Published private(set) var leaderboardMode = "Arcade"
     @Published private(set) var lastRankProgress: RankProgress?
     private var boardRequests: [String: UUID] = [:]
     @Published private(set) var activeRun: RunContext?
@@ -325,6 +326,12 @@ final class PlayerSession: ObservableObject {
                 leaderboardStatus[mode] = leaderboards[mode] == nil ? "Leaderboard unavailable. Start the badge station, then refresh." : "Connection interrupted · showing last received scores"
             }
         }
+    }
+
+    func selectLeaderboard(_ mode: String) {
+        guard ["Arcade", "Chill", "Tennis"].contains(mode) else { return }
+        leaderboardMode = mode
+        refreshLeaderboard(mode)
     }
 
     private func request(_ path: String, method: String, body: [String: Any], query: [String: String] = [:]) async throws -> Data {

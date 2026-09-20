@@ -19,7 +19,7 @@ The implemented app is `build/Aircade.app` in this checkout. Start the configure
 
 | Check | Result and scope |
 | --- | --- |
-| Native test suite | 126 tests, 2 opt-in live tests skipped, 0 failures after adding the per-rally badge prompt. |
+| Native test suite | 127 tests, 2 opt-in live tests skipped, 0 failures after keeping leaderboard navigation inside the native app. |
 | Station suite | 25/25 passed, including isolated MongoDB integration, cold startup, provider validation, and fractional/early-wake scheduling. The offline subset also passed 23/23. |
 | Actual API contact check | One live request each for Baseten, Astra, and Jev; real native collision code produced a player return followed by the exact API-selected opponent return. Controller input was accelerated scripted motion, explicitly unranked. |
 | Corrected paired live run | 80/80 requests completed with legal decisions before the shared six-second deadline. Astra: 40/40, median 1,836.5 ms. Jev: 40/40, median 322 ms. Twenty fixed synthetic states repeated twice per provider; this does not measure tennis ability. |

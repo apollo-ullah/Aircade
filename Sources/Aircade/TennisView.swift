@@ -280,7 +280,10 @@ struct TennisView: View {
                 MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
                 MotionButton("Next player") { game.leave(); players.nextPlayer() }
                 if !game.liveReady { MotionButton("Connect controller") { showingSetup = true } }
-                MotionButton("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: "Tennis")) }
+                MotionButton("Leaderboard") {
+                    players.selectLeaderboard("Tennis")
+                    NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.profile)
+                }
             }.buttonStyle(WiiButtonStyle())
         }
     }

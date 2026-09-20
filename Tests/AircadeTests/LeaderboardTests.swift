@@ -3,6 +3,17 @@ import MotionCore
 @testable import Aircade
 
 final class LeaderboardTests: XCTestCase {
+    func testNativeLeaderboardSelectionKeepsOnlySupportedBoards() {
+        let players = PlayerSession(queueDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+                                    automaticRetry: false, uploadOnFinish: false,
+                                    configurationProvider: { nil })
+        XCTAssertEqual(players.leaderboardMode, "Arcade")
+        players.selectLeaderboard("Tennis")
+        XCTAssertEqual(players.leaderboardMode, "Tennis")
+        players.selectLeaderboard("Not a board")
+        XCTAssertEqual(players.leaderboardMode, "Tennis")
+    }
+
     @MainActor
     func testGameSelectionReachesBothLeaderboardAndStandingEndpoints() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

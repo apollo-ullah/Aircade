@@ -241,7 +241,10 @@ struct NeonRushView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
                 MotionButton("Next player") { game.leave(); players.nextPlayer() }
-                MotionButton("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: game.state.difficulty.rawValue)) }
+                MotionButton("Leaderboard") {
+                    players.selectLeaderboard(game.state.difficulty.rawValue)
+                    NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.profile)
+                }
                 if motion.scriptedScenario != nil { MotionButton("Change scripted test") { showingScripts = true } }
                 if !game.inputReady { MotionButton("Connect controller") { showingSetup = true } }
             }.buttonStyle(WiiButtonStyle())

@@ -1,11 +1,10 @@
 import SwiftUI
-import AppKit
 
 struct PlayerChannelView: View {
     @ObservedObject var motion: MotionModel
     @ObservedObject var players: PlayerSession
     @State private var restoreCamera = false
-    @State private var mode = "Arcade"
+    private var mode: String { players.leaderboardMode }
 
     var body: some View {
         ScrollView {
@@ -29,7 +28,7 @@ struct PlayerChannelView: View {
                 }
                 HStack {
                     ForEach(["Arcade", "Chill", "Tennis"], id: \.self) { board in
-                        MotionButton(board == "Tennis" ? board : "Neon Rush · \(board)") { mode = board }
+                        MotionButton(board == "Tennis" ? board : "Neon Rush · \(board)") { players.selectLeaderboard(board) }
                             .buttonStyle(WiiButtonStyle(primary: mode == board))
                     }
                 }
@@ -81,7 +80,6 @@ struct PlayerChannelView: View {
                         Text(players.leaderboardStatus[mode] ?? "").font(.caption).foregroundStyle(.secondary)
                         Spacer()
                         MotionButton("Refresh") { players.refreshLeaderboard(mode) }.buttonStyle(.plain)
-                        MotionButton("Open score display") { NSWorkspace.shared.open(players.leaderboardURL(for: mode)) }.buttonStyle(.plain).disabled(!players.profilesAvailable)
                     }.padding(18)
                 }.wiiPanel()
                 HStack(spacing: 28) {
