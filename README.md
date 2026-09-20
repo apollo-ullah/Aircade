@@ -98,7 +98,7 @@ The native app uses SwiftUI and SceneKit. The local station uses Node.js and Mon
 
 ## Source availability
 
-This README and its recorded evidence describe our integrated judging build. The public `main` branch currently contains an earlier playable build; the latest Astra integration and sensor-inspection source are pending publication. The existing video also predates those additions. The instructions below describe the integrated build.
+The public `main` branch contains the complete integrated judging build, including the Astra Responses API opponent, Codex computer-use experiment, sensor inspector, badge flow, and native leaderboards. The existing 54-second video predates some of those additions, so the README and Devpost gallery show the final judging experience in more detail.
 
 ## Run locally
 

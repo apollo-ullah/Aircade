@@ -8,11 +8,11 @@
 - The public project links to https://github.com/apollo-ullah/Aircade.
 - GitHub is public, verified through the GitHub API. No visibility change was made by this documentation update.
 - The existing 54-second unlisted demo remains linked. It predates the final sensor and API inspection screens.
-- Latest integrated judging source remains local pending a publication decision. The README explicitly distinguishes it from the earlier source on main.
+- The complete integrated judging source is published on `main`, including the Astra opponent, computer-use experiment, sensor inspector, badge flow, and native leaderboards.
 
 ## README publication
 
-The requested README was published and verified through the rendered GitHub page at commit `2be7e3eae8e4907779d2d2f6f9522b0abd407f70`. Only README.md was uploaded. Automatic approval review rejected the broader supporting-file publication because it included sensor/evidence artifacts beyond the specific documentation request. These remain local, and the public README contains no links to unpublished files.
+The README and integrated judging source are published on the public `main` branch. The README links the playable system, OpenAI integration, Codex development story, measured comparison, Devpost, and demo video without exposing local credentials.
 
 ## Remaining physical verification
 
