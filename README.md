@@ -21,7 +21,7 @@ To use the Baseten policy, put `BASETEN_API_KEY=...` in the ignored repository-r
 
 ## Audio output
 
-Open **air → Settings → Sound → Audio output**. **Mac speakers** is the default and is remembered across launches. Menu music, menu cues and game effects route directly to the built-in speakers while the AirPods remain connected for motion. **System default** follows the Mac's selected output instead. Use **Test sound** to check the route; the Mac's speaker volume/mute still applies.
+Open **air → Settings → Sound → Audio output**. **Mac speakers** is the default and is remembered across launches. The build bundles Kevin MacLeod's CC BY 4.0 track **Local Forecast** for the home menu (full attribution is in `audio-library/CREDITS.md`). Menu music, menu cues and game effects route directly to the built-in speakers while the AirPods remain connected for motion. **System default** follows the Mac's selected output instead. Use **Test sound** to check the route; the Mac's speaker volume/mute still applies.
 
 This setting only changes Aircade playback, not system-wide audio. Device changes refresh the route automatically. If built-in speakers are unavailable, speaker mode pauses audio instead of silently switching to AirPods. The existing menu music still plays on the home screen; routing does not add background music to other games.
 

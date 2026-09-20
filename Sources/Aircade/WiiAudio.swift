@@ -85,9 +85,9 @@ final class WiiAudio: @unchecked Sendable {
         }
     }
 
-    /// Plays a track the user has placed in `Resources/Music/` beside the app
-    /// bundle. Nothing ships in that folder and it is gitignored, so this is a
-    /// no-op on a clean checkout.
+    /// Plays the licensed menu track bundled by `scripts/build.sh`. The original
+    /// `Resources/Music/` folder beside the app remains supported so local track
+    /// overrides from older builds keep working.
     func startMusic() {
         queue.async { [self] in musicRequested = true; startMusicIfNeeded() }
     }
@@ -99,18 +99,41 @@ final class WiiAudio: @unchecked Sendable {
             if !music.isPlaying, !music.play() { output.reportPlaybackFailure() }
             return
         }
-        let folder = Bundle.main.bundleURL.deletingLastPathComponent()
-            .appendingPathComponent("Resources/Music", isDirectory: true)
-        let tracks = (try? FileManager.default.contentsOfDirectory(at: folder,
-                                                                   includingPropertiesForKeys: nil))?
-            .filter { ["mp3", "m4a", "wav", "aiff"].contains($0.pathExtension.lowercased()) }
-        guard let track = tracks?.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }).first,
+        let folders = Self.musicFolders(bundleURL: Bundle.main.bundleURL,
+                                        resourceURL: Bundle.main.resourceURL)
+        let track = folders.lazy.compactMap(Self.firstPlayableTrack(in:)).first
+        guard let track,
               let player = try? AVAudioPlayer(contentsOf: track) else { return }
         player.numberOfLoops = -1
         player.volume = 0.35
         player.currentDevice = destination.uid
         if !player.play() { output.reportPlaybackFailure() }
         music = player
+    }
+
+    static func musicFolders(bundleURL: URL, resourceURL: URL?) -> [URL] {
+        var folders: [URL] = []
+        if let resourceURL {
+            folders.append(resourceURL.appendingPathComponent("Music", isDirectory: true))
+        }
+        let legacy = bundleURL.deletingLastPathComponent()
+            .appendingPathComponent("Resources/Music", isDirectory: true)
+        if !folders.contains(legacy) { folders.append(legacy) }
+        return folders
+    }
+
+    static func hasPlayableMusic(bundleURL: URL, resourceURL: URL?) -> Bool {
+        musicFolders(bundleURL: bundleURL, resourceURL: resourceURL)
+            .contains { firstPlayableTrack(in: $0) != nil }
+    }
+
+    private static func firstPlayableTrack(in folder: URL) -> URL? {
+        let supported = Set(["mp3", "m4a", "wav", "aiff"])
+        return (try? FileManager.default.contentsOfDirectory(at: folder,
+                                                              includingPropertiesForKeys: nil))?
+            .filter { supported.contains($0.pathExtension.lowercased()) }
+            .sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+            .first
     }
 
     func stopMusic() {

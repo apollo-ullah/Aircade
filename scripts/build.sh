@@ -3,8 +3,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 swift build -c release
 APP="$PWD/build/Aircade.app"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Music"
 cp .build/release/Aircade "$APP/Contents/MacOS/Aircade"
+cp "audio-library/music/Local Forecast.mp3" "$APP/Contents/Resources/Music/Local Forecast.mp3"
+cp audio-library/CREDITS.md "$APP/Contents/Resources/AudioCredits.md"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

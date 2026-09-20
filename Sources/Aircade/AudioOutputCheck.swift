@@ -22,9 +22,8 @@ enum AudioOutputCheck {
             let effects = await GameAudio.shared.outputDeviceUIDs()
             let destination = output.destination
             let systemAfter = AudioDeviceCatalog.defaultOutputID()
-            let folder = Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("Resources/Music")
-            let hasMusic = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [])
-                .contains { ["mp3", "m4a", "wav", "aiff"].contains(URL(fileURLWithPath: $0).pathExtension.lowercased()) }
+            let hasMusic = WiiAudio.hasPlayableMusic(bundleURL: Bundle.main.bundleURL,
+                                                      resourceURL: Bundle.main.resourceURL)
             let passed = destination?.isBuiltInSpeaker == true && systemBefore == systemAfter &&
                 menu["menuCue"] == destination?.uid && effects["Glass"] == destination?.uid &&
                 (!hasMusic || menu["music"] == destination?.uid)

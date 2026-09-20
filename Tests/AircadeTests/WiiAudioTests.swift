@@ -22,4 +22,31 @@ final class WiiAudioTests: XCTestCase {
         let pitches = Set(WiiAudio.Cue.allCases.map(\.frequency))
         XCTAssertEqual(pitches.count, WiiAudio.Cue.allCases.count)
     }
+
+    func testMusicLooksInsideTheAppBeforeUsingTheLegacySiblingFolder() {
+        let app = URL(fileURLWithPath: "/tmp/Aircade.app", isDirectory: true)
+        let resources = app.appendingPathComponent("Contents/Resources", isDirectory: true)
+
+        XCTAssertEqual(
+            WiiAudio.musicFolders(bundleURL: app, resourceURL: resources),
+            [
+                resources.appendingPathComponent("Music", isDirectory: true),
+                URL(fileURLWithPath: "/tmp/Resources/Music", isDirectory: true)
+            ]
+        )
+    }
+
+    func testBundledMusicIsDetected() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let app = root.appendingPathComponent("Aircade.app", isDirectory: true)
+        let resources = app.appendingPathComponent("Contents/Resources", isDirectory: true)
+        let music = resources.appendingPathComponent("Music", isDirectory: true)
+        try FileManager.default.createDirectory(at: music, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertFalse(WiiAudio.hasPlayableMusic(bundleURL: app, resourceURL: resources))
+        try Data([0]).write(to: music.appendingPathComponent("Menu.mp3"))
+        XCTAssertTrue(WiiAudio.hasPlayableMusic(bundleURL: app, resourceURL: resources))
+    }
 }
