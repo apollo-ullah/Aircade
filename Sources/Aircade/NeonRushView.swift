@@ -25,7 +25,7 @@ struct NeonRushView: View {
                         VStack(spacing: 5) {
                             Text(game.feedback).font(.system(size: 23, weight: .bold, design: .default)).italic()
                             if game.feedbackPoints > 0 { Text("+\(game.feedbackPoints)").font(.system(size: 32, weight: .bold, design: .default)) }
-                        }.foregroundStyle(game.feedbackGood ? rushLime : .red)
+                        }.foregroundStyle(game.feedbackGood ? .white : .yellow).shadow(color: .black.opacity(0.8), radius: 4, y: 2)
                             .padding(.bottom, 34).allowsHitTesting(false)
                     }
                     playFooter
@@ -65,141 +65,112 @@ struct NeonRushView: View {
     }
 
     private var ready: some View {
-        HStack(alignment: .top, spacing: 26) {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("CHOOSE YOUR CHALLENGE", systemImage: "figure.fencing")
-                    .font(WiiTheme.display(11, .bold)).tracking(2).foregroundStyle(rushLime)
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text("Neon").foregroundStyle(WiiTheme.ink)
-                    Text("Rush").foregroundStyle(rushLime).italic()
-                }.font(WiiTheme.display(50)).tracking(-3)
-                Text("A little swing. A whole lot of play.")
-                    .font(WiiTheme.display(18, .medium))
-                Text("Slice the blocks. Dodge the red.\nFind your rhythm in a 60-second challenge.")
-                    .font(WiiTheme.body(14)).foregroundStyle(.secondary).lineSpacing(4)
-                HStack(spacing: 32) {
-                    menuStat("60", "SECONDS")
-                    menuStat("3", "ROUNDS")
-                    menuStat("×4", "MAX COMBO")
-                }.padding(.vertical, 7)
-                Divider()
-                Text("Pick your pace").font(WiiTheme.display(15, .semibold))
-                HStack(spacing: 10) {
-                    ForEach(RushDifficulty.allCases, id: \.self) { difficulty in
-                        MotionButton { game.difficulty = difficulty } label: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Image(systemName: difficulty == .chill ? "sun.max.fill" : "bolt.fill")
-                                    Text(difficulty.rawValue)
-                                    Spacer(minLength: 0)
-                                    if game.difficulty == difficulty { Image(systemName: "checkmark.circle.fill") }
-                                }.font(WiiTheme.display(15, .bold))
-                                Text(difficulty == .chill ? "Find your flow" : "Turn up the challenge").font(WiiTheme.body(11))
-                            }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                                .foregroundStyle(game.difficulty == difficulty ? .white : WiiTheme.ink)
-                                .background(game.difficulty == difficulty ? rushLime : Color.white, in: RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(rushLime.opacity(0.35), lineWidth: 1.5))
-                        }.buttonStyle(.plain)
-                    }
+        GameLobby(identity: .rush) {
+            HStack {
+                GameMetric(value: "60", label: "SECONDS")
+                GameMetric(value: "3", label: "ROUNDS")
+                GameMetric(value: "×4", label: "MAX MULTIPLIER")
+            }.padding(.vertical, 3)
+            GameRule(symbol: "sparkle", title: "Slice green. Follow blue.",
+                     detail: "Sweep through green blocks; cut blue arrows in their direction.", color: Color(red: 0.19, green: 0.52, blue: 0.37))
+            GameRule(symbol: "xmark", title: "Keep clear of red",
+                     detail: "Hazards and missed cuts cost energy and reset your combo.", color: Color(red: 0.76, green: 0.27, blue: 0.29))
+        } options: {
+            HStack {
+                Text("Pick your pace").font(WiiTheme.display(22))
+                Spacer(); Image(systemName: "bolt.fill").foregroundStyle(rushLime)
+            }
+            Text("Three rounds. One personal best to beat.")
+                .font(WiiTheme.body(13)).foregroundStyle(WiiTheme.inkSoft)
+            VStack(spacing: 10) {
+                ForEach(RushDifficulty.allCases, id: \.self) { difficulty in
+                    MotionButton { game.difficulty = difficulty } label: {
+                        GameOption(title: difficulty.rawValue,
+                                   detail: difficulty == .chill ? "7 energy · generous timing · any direction" : "5 energy · faster cuts · follow the arrows",
+                                   symbol: difficulty == .chill ? "sun.max.fill" : "bolt.fill",
+                                   selected: game.difficulty == difficulty)
+                    }.buttonStyle(GameActionStyle())
                 }
-                MotionButton(id: "start-neon-rush") {
-                    if game.inputReady { game.start(demo: motion.activeInputSimulated) }
-                    else { showingSetup = true }
-                } label: {
-                    HStack {
-                        Image(systemName: "play.circle.fill").font(.title2)
-                        Text(game.inputReady ? (players.player == nil ? "Play as guest" : "Let’s play!") : "Connect your controller")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                    }.font(WiiTheme.display(18)).padding(.vertical, 6)
-                }.buttonStyle(WiiButtonStyle(primary: true))
+            }
+            HStack(spacing: 6) {
+                ForEach(["Ignite", "Flow", "Overdrive"], id: \.self) { round in
+                    Text(round).font(WiiTheme.display(11, .semibold)).frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .background(rushLime.opacity(0.07), in: Capsule())
+                }
+            }.foregroundStyle(rushLime).accessibilityLabel("Three rounds: Ignite, Flow, Overdrive")
+            Divider()
+            MotionButton { showingSetup = true } label: {
                 HStack {
-                    MotionButton("How to play") { showHowTo.toggle() }
-                    Spacer()
-                    MotionButton { motion.start(demo: true)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { game.start(demo: true) }
-                    } label: { Label("Watch demo", systemImage: "play.rectangle") }
-                }.buttonStyle(.plain).font(WiiTheme.body(13, .medium)).foregroundStyle(rushLime)
-            }.padding(24).frame(width: 430).wiiPanel()
-
-            VStack(alignment: .trailing, spacing: 16) {
-                HStack(spacing: 8) {
-                    Image(systemName: "trophy.fill").foregroundStyle(Color.orange)
-                    Text("Best on this Mac")
-                    Text(game.bestScore.formatted()).fontWeight(.bold).foregroundStyle(rushLime)
-                }.font(WiiTheme.body(14)).padding(14).wiiPanel()
-                if let standing = players.standings[game.difficulty.rawValue] {
-                    Text(standing.challenge).font(.callout).padding(16).frame(width: 300, alignment: .leading).wiiPanel()
-                }
+                    Image(systemName: "gamecontroller.fill")
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(game.inputReady ? "Controller ready" : "Connect a controller").font(WiiTheme.display(14))
+                        Text(game.inputReady ? motion.activeControllerName : "AirPod or iPhone").font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
+                    }
+                    Spacer(); Image(systemName: "chevron.right")
+                }.foregroundStyle(rushLime).padding(.vertical, 4).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+            MotionButton(id: "start-neon-rush") {
+                if game.inputReady { game.start(demo: motion.activeInputSimulated) }
+                else { showingSetup = true }
+            } label: {
+                GamePrimaryAction(title: game.inputReady ? "Let’s play" : "Connect & play", symbol: game.inputReady ? "play.fill" : "gamecontroller.fill")
+            }.buttonStyle(GameActionStyle())
+            HStack {
+                MotionButton("How to play") { showHowTo = true }
                 Spacer()
-                if showHowTo { howToCard }
-                else {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Every swing counts.").font(WiiTheme.display(20))
-                        rule("✦", "SLICE", "Green blocks build your combo.", Color(red: 0.24, green: 0.63, blue: 0.18))
-                        rule("→", "FOLLOW", "Blue arrows show the cut direction.", rushLime)
-                        rule("×", "AVOID", "Red hazards cost one energy.", .red)
-                    }.padding(22).frame(width: 300).wiiPanel()
-                }
-                MotionButton { showingSetup = true } label: {
-                    ActiveControllerBadge(motion: motion, controllers: motion.controllers)
-                        .padding(12).wiiPanel()
-                }.buttonStyle(.plain)
-            }.frame(maxWidth: .infinity, alignment: .trailing)
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-    private func playerScores(_ player: BadgePlayer) -> some View {
-        VStack(alignment: .leading, spacing: 11) {
+                MotionButton {
+                    motion.start(demo: true)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { game.start(demo: true) }
+                } label: { Label("Watch demo", systemImage: "play.rectangle") }
+            }.buttonStyle(WiiButtonStyle())
             HStack(spacing: 8) {
-                Image(systemName: "person.crop.circle.fill").foregroundStyle(rushLime)
-                Text(player.nickname).fontWeight(.semibold).lineLimit(1)
+                Image(systemName: "trophy.fill").foregroundStyle(rushLime)
+                Text("Best  \((players.player == nil ? game.bestScore : players.bests[game.difficulty.rawValue, default: 0]).formatted())").font(WiiTheme.display(13))
+                Spacer()
+                Text(players.player?.nickname ?? "On this Mac").font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
             }
-            Text("YOUR HIGH SCORES").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(.secondary)
-            HStack(spacing: 30) {
-                scoreLabel("Arcade", players.bests["Arcade"])
-                scoreLabel("Chill", players.bests["Chill"])
+            if let standing = players.standings[game.difficulty.rawValue] {
+                Text(standing.challenge).font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
             }
-            Text("Saved to your badge profile").font(.caption).foregroundStyle(.secondary)
-        }.font(.system(size: 14, design: .default)).padding(16).frame(width: 300, alignment: .leading).wiiPanel()
-    }
-    private func scoreLabel(_ difficulty: String, _ score: Int?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(difficulty.uppercased()).font(.caption2.bold()).foregroundStyle(.secondary)
-            Text(score.map { $0.formatted() } ?? "—").font(.title3.bold()).monospacedDigit().foregroundStyle(rushLime)
         }
-    }
-    private var howToCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("FIND YOUR FLOW").font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundStyle(rushLime)
-            Text("1. Connect and calibrate in Controller setup.\n\n2. Wait for blocks to reach you, then sweep your blade through them.\n\n3. Cut in the arrow's direction. Keep your blade away from red × blocks.\n\n4. Five clean cuts increase your multiplier. A miss, wrong cut, or hazard breaks your combo.")
-                .font(.callout).foregroundStyle(WiiTheme.ink.opacity(0.75))
-            MotionButton("Got it") { showHowTo = false }.buttonStyle(.bordered)
-        }.padding(24).frame(maxWidth: 360).wiiPanel()
+        .sheet(isPresented: $showHowTo) {
+            VStack(alignment: .leading, spacing: 22) {
+                Text("Find your flow").font(WiiTheme.display(30))
+                GameRule(symbol: "gamecontroller.fill", title: "01 · Get ready", detail: "Connect your controller, hold it upright, then press R to recenter.")
+                GameRule(symbol: "sparkle", title: "02 · Wait, then sweep", detail: "Let blocks reach your blade before cutting. Green accepts any direction.")
+                GameRule(symbol: "arrow.down", title: "03 · Follow the arrow", detail: "Cut blue blocks in the direction shown. Keep your blade away from red hazards.")
+                GameRule(symbol: "bolt.fill", title: "04 · Build your multiplier", detail: "Every five consecutive cuts increases your multiplier, up to ×4.")
+                MotionButton { showHowTo = false } label: { GamePrimaryAction(title: "Got it", symbol: "checkmark") }.buttonStyle(GameActionStyle())
+            }.padding(32).frame(width: 510).background(WiiTheme.stage).foregroundStyle(WiiTheme.ink)
+        }
     }
     private var hud: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(game.isDemo ? "DEMO SCORE" : "\(players.player?.nickname ?? "Player") · SCORE").font(.system(size: 12, weight: .semibold)).lineLimit(1)
                 HStack(alignment: .firstTextBaseline, spacing: 18) {
-                    Text(game.state.score.formatted()).font(.system(size: 38, weight: .semibold)).monospacedDigit()
+                    Text(game.state.score.formatted()).font(WiiTheme.display(38)).monospacedDigit()
                     Text("×\(game.state.multiplier)").font(.system(size: 24, weight: .bold)).foregroundStyle(Color(red: 0.55, green: 0.88, blue: 1))
                 }
                 Text("\(game.state.combo) consecutive cuts").font(.system(size: 12))
-            }.frame(width: 205, alignment: .leading).wiiReadout()
+            }.frame(width: 205, alignment: .leading).gameReadout()
             Spacer()
             VStack(spacing: 4) {
                 Text(game.state.roundName).font(.system(size: 12, weight: .semibold)).tracking(1)
                 Text(String(format: "%d:%02d", Int(ceil(game.state.remaining)) / 60, Int(ceil(game.state.remaining)) % 60))
-                    .font(.system(size: 34, weight: .medium)).monospacedDigit()
-                ProgressView(value: game.state.remaining, total: 60).tint(.white).frame(width: 116)
-            }.wiiReadout()
+                    .font(WiiTheme.display(34, .semibold)).monospacedDigit()
+                HStack(spacing: 5) {
+                    ForEach(0..<3) { round in
+                        Capsule().fill(game.state.elapsed >= Double(round * 20) ? WiiTheme.accent : .white.opacity(0.2))
+                            .frame(width: 35, height: 4)
+                    }
+                }.accessibilityLabel("Round \(min(3, Int(game.state.elapsed / 20) + 1)) of 3")
+            }.gameReadout()
             Spacer()
             VStack(alignment: .trailing, spacing: 10) {
                 HStack(spacing: 20) {
                     Text("ENERGY").font(.system(size: 12, weight: .semibold)).tracking(1)
-                    MotionButton { game.pause() } label: { Image(systemName: "pause.fill").padding(5) }
+                    MotionButton { game.pause() } label: { Image(systemName: "pause.fill").frame(width: 40, height: 36).background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10)) }
                         .buttonStyle(.plain).accessibilityLabel("Pause game")
                 }
                 HStack(spacing: 7) {
@@ -209,35 +180,32 @@ struct NeonRushView: View {
                             .frame(width: 18, height: 18)
                     }
                 }
-            }.wiiReadout()
+            }.gameReadout()
         }.foregroundStyle(.white).padding(24)
             .allowsHitTesting(game.state.phase == .playing || game.state.phase == .countdown)
     }
     private var playFooter: some View {
         HStack(spacing: 16) {
-            Text("Neon Rush").font(.system(size: 17, weight: .semibold)).italic()
+            Text("Neon Rush").font(WiiTheme.display(16))
             if game.isDemo { Text(motion.scriptedScenario == nil ? "DEMO · NO HIGH SCORE" : "SCRIPTED · NO HIGH SCORE").font(.system(size: 11, weight: .bold)).foregroundStyle(.yellow) }
             Spacer()
             if let script = motion.scriptedScenario {
                 MotionButton("Change test") { showingScripts = true }.buttonStyle(.bordered).help(script.rawValue)
             }
-            ActiveControllerBadge(motion: motion, controllers: motion.controllers)
+            Label(motion.activeControllerName, systemImage: "gamecontroller.fill").font(WiiTheme.body(12, .semibold))
             Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
-            MotionButton { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }
+            MotionButton { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash").frame(width: 36, height: 36) }
                 .buttonStyle(.plain).accessibilityLabel(game.sound ? "Mute sound" : "Enable sound")
         }.foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 2, y: 1)
             .padding(24).background(LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom))
     }
     private var countdown: some View {
-        VStack(spacing: 10) {
-            Text("GET INTO POSITION").font(.system(size: 14, weight: .semibold)).tracking(2).foregroundStyle(.white)
-            Text("\(max(1, Int(ceil(game.state.countdown))))").font(.system(size: 130, weight: .bold, design: .default)).italic().foregroundStyle(rushLime)
-            Text("Sweep through the blocks. Avoid red.").foregroundStyle(.white)
-        }.shadow(color: .black.opacity(0.6), radius: 2, y: 1).frame(maxWidth: .infinity, maxHeight: .infinity).background(.black.opacity(0.25)).allowsHitTesting(false)
+        GameCountdown(value: game.state.countdown, title: "FIND YOUR STARTING POSE", hint: "Sweep through the blocks. Keep clear of red.")
     }
     private var pauseCard: some View {
         overlayCard {
-            Text("Taking a break?").font(.system(size: 42, weight: .bold, design: .default)).italic()
+            Image(systemName: "pause.circle.fill").font(.system(size: 40)).foregroundStyle(rushLime)
+            Text("Take a breather").font(WiiTheme.display(36))
             Text(game.pauseReason).foregroundStyle(.secondary).multilineTextAlignment(.center)
             Label(game.inputReady ? "\(motion.activeControllerName) ready" : "Waiting for \(motion.activeControllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 .foregroundStyle(game.inputReady ? rushLime : .orange).font(.callout)
@@ -246,16 +214,16 @@ struct NeonRushView: View {
                 MotionButton("Controller setup") { showingSetup = true }
                 MotionButton("Scripted test") { showingScripts = true }
                 MotionButton("End run") { game.leave() }
-            }.buttonStyle(.plain).foregroundStyle(.secondary).font(.callout)
+            }.buttonStyle(WiiButtonStyle())
         }
     }
     private var results: some View {
         overlayCard {
             Text(game.state.completed ? "RUN COMPLETE" : "OUT OF ENERGY").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(3).foregroundStyle(rushLime)
             HStack(alignment: .center, spacing: 28) {
-                Text(game.state.completed ? game.state.rank : "↻").font(.system(size: 90, weight: .bold, design: .default)).italic().foregroundStyle(rushLime)
+                Text(game.state.completed ? game.state.rank : "↻").font(WiiTheme.display(78)).foregroundStyle(rushLime)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(game.state.score.formatted()).font(.system(size: 54, weight: .bold, design: .default)).monospacedDigit()
+                    Text(game.state.score.formatted()).font(WiiTheme.display(52)).monospacedDigit()
                     Text(resultScoreCaption)
                         .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(game.newRecord ? rushLime : .secondary)
                 }
@@ -270,13 +238,13 @@ struct NeonRushView: View {
             RankProgressCard(players: players, runID: game.runID)
             Text(players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
-            HStack(spacing: 24) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
                 MotionButton("Next player") { game.leave(); players.nextPlayer() }
                 MotionButton("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: game.state.difficulty.rawValue)) }
                 if motion.scriptedScenario != nil { MotionButton("Change scripted test") { showingScripts = true } }
                 if !game.inputReady { MotionButton("Connect controller") { showingSetup = true } }
-            }.buttonStyle(.plain).foregroundStyle(.secondary).font(.callout)
+            }.buttonStyle(WiiButtonStyle())
         }
     }
     private var resultScoreCaption: String {
@@ -289,46 +257,15 @@ struct NeonRushView: View {
         return "\(game.state.difficulty.rawValue.uppercased()) · BEST ON THIS MAC \(game.bestScore.formatted())"
     }
     private func overlayCard<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
-        GeometryReader { geometry in
-            ZStack {
-                WiiTheme.accentDeep.opacity(0.22)
-                ScrollView {
-                    VStack(spacing: 22, content: content).padding(38).frame(width: 600)
-                        .wiiPanel()
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(rushLime.opacity(0.15)))
-                        .padding(.vertical, 16)
-                        .frame(maxWidth: .infinity, minHeight: geometry.size.height)
-                }.scrollIndicators(.hidden)
-            }
-        }
+        GameOverlay(content: content)
     }
     private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {
-        MotionButton(action: action) {
-            HStack { Text(title); Spacer(); Image(systemName: "arrow.right") }
-                .font(.system(size: 13, weight: .bold, design: .monospaced)).padding(18)
-                .foregroundStyle(.white).background(rushLime, in: RoundedRectangle(cornerRadius: 6))
-        }.buttonStyle(.plain)
-    }
-    private var brand: some View { Text("aircade").foregroundStyle(WiiTheme.accentDeep).font(.system(size: 34, weight: .medium, design: .default)).tracking(-1).padding(.trailing, 12) }
-    private var connectionPill: some View {
-        ActiveControllerBadge(motion: motion, controllers: motion.controllers)
+        MotionButton(action: action) { GamePrimaryAction(title: title) }.buttonStyle(GameActionStyle())
     }
     private func menuStat(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(value).font(.system(size: 24, weight: .bold, design: .default)).monospacedDigit()
-            Text(label).font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(1).foregroundStyle(.secondary)
-        }
+        GameMetric(value: value, label: label)
     }
-    private func rule(_ symbol: String, _ title: String, _ subtitle: String, _ color: Color) -> some View {
-        HStack(spacing: 14) {
-            Text(symbol).font(.system(size: 26, weight: .bold)).frame(width: 43, height: 43)
-                .foregroundStyle(color).background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
-            }
-        }
-    }
+
 }
 
 struct ControllerSetupView: View {

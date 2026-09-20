@@ -3,6 +3,11 @@ import AppKit
 /// Opt-in native navigation check. It opens no physical motion source and saves no scores.
 enum ShellSmoke {
     static func run(_ motion: MotionModel) {
+        // Exercise the smallest supported viewport when reviewing game layouts.
+        if CommandLine.arguments.contains("--compact-ui") {
+            NSApp.windows.first(where: { $0.contentView != nil })?
+                .setContentSize(NSSize(width: 1120, height: 760))
+        }
         let routes: [Route] = [.home, .controller, .profile, .settings, .tennis, .home,
                                .neonRush, .home, .duel, .home, .scripts, .neonRush, .home]
         let code = motion.controllers.phoneHost.code

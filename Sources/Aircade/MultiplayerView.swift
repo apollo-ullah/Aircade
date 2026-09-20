@@ -5,114 +5,186 @@ struct MultiplayerView: View {
     @ObservedObject var motion: MotionModel
     @ObservedObject var duel: MultiplayerModel
     @State private var setup = false
+    private let accent = GameIdentity.duel.accent
+
     var body: some View {
         ZStack {
             SaberView(controller: duel.scene.court).ignoresSafeArea()
-            VStack(spacing: 0) {
-                HStack {
-                    MotionButton { motion.showMultiplayer(false) } label: { Label("Aircade", systemImage: "chevron.left") }
-                        .buttonStyle(WiiButtonStyle())
-                    Text("Saber Duel").font(.system(size: 26, weight: .bold)).italic()
-                    if duel.scripted { Text("SCRIPTED DEMO").font(.caption.bold()).foregroundStyle(.orange) }
-                    Spacer()
-                    if duel.match.phase != .lobby {
-                        Text(String(format: "%d:%02d", Int(ceil(duel.match.remaining)) / 60, Int(ceil(duel.match.remaining)) % 60))
-                            .font(.system(size: 28, weight: .bold)).monospacedDigit()
-                        if duel.match.phase == .playing || duel.match.phase == .countdown {
-                            MotionButton("Pause") { duel.pause() }.buttonStyle(WiiButtonStyle())
-                        }
-                    }
-                }.padding(22).background(.white.opacity(0.96))
-                HStack(alignment: .top) {
-                    player(.one, name: duel.localName, color: WiiTheme.accentDeep)
-                    Spacer()
-                    player(.two, name: duel.name(.two), color: .orange)
-                }.padding(24)
-                Spacer()
-                if !duel.feedback.isEmpty {
-                    Text(duel.feedback).font(.system(size: 38, weight: .heavy)).italic()
-                        .foregroundStyle(.white).shadow(color: .black.opacity(0.7), radius: 3).padding()
-                }
-                HStack {
-                    Text("Swing through the other player’s target. Cross blades to block.")
-                    Spacer()
-                    Text("5 health · 60 seconds")
-                }.font(.callout.weight(.semibold)).padding(20).background(.white.opacity(0.96))
-            }
             if duel.match.phase == .lobby { lobby }
-            if duel.match.phase == .countdown {
-                VStack(spacing: 10) {
-                    Text("HOLD YOUR STARTING POSE").font(.headline)
-                    Text("\(max(1, Int(ceil(duel.match.countdown))))").font(.system(size: 120, weight: .heavy))
-                    Text(duel.match.recovering ? "Waiting for both controllers…" : "Blue attacks right. Orange attacks left.")
-                }.foregroundStyle(.white).shadow(color: .black, radius: 4).allowsHitTesting(false)
+            else {
+                VStack(spacing: 0) {
+                    HStack(alignment: .top, spacing: 24) {
+                        player(.one, color: WiiTheme.accent)
+                        Spacer(minLength: 12)
+                        VStack(spacing: 7) {
+                            Text("SABER DUEL").font(WiiTheme.display(11)).tracking(2)
+                            Text(String(format: "%d:%02d", Int(ceil(duel.match.remaining)) / 60, Int(ceil(duel.match.remaining)) % 60))
+                                .font(WiiTheme.display(34)).monospacedDigit()
+                            MotionButton { duel.pause() } label: {
+                                Label("Pause", systemImage: "pause.fill").font(WiiTheme.display(12)).padding(.horizontal, 12).padding(.vertical, 7)
+                                    .background(.white.opacity(0.12), in: Capsule())
+                            }.buttonStyle(.plain).accessibilityLabel("Pause duel")
+                        }.foregroundStyle(.white).gameReadout()
+                        Spacer(minLength: 12)
+                        player(.two, color: Color(red: 1, green: 0.67, blue: 0.32))
+                    }.padding(24)
+                        .allowsHitTesting(duel.match.phase == .playing || duel.match.phase == .countdown)
+                    Spacer()
+                    if !duel.feedback.isEmpty && duel.match.phase == .playing {
+                        Text(duel.feedback).font(WiiTheme.display(34))
+                            .foregroundStyle(.white).shadow(color: .black.opacity(0.7), radius: 4).padding(24)
+                            .allowsHitTesting(false)
+                    }
+                    HStack(spacing: 18) {
+                        Label("Blue attacks right", systemImage: "arrow.right").foregroundStyle(WiiTheme.accent)
+                        Spacer()
+                        if duel.scripted { Text("DEMO · SIMULATED CONTROLLERS").foregroundStyle(.yellow) }
+                        else { Text("Cross blades to block  ·  Space to pause") }
+                        Spacer()
+                        Label("Orange attacks left", systemImage: "arrow.left").foregroundStyle(Color.orange)
+                    }.font(WiiTheme.display(12, .semibold)).foregroundStyle(.white)
+                        .padding(22).background(.black.opacity(0.55))
+                }
+                if duel.match.phase == .countdown {
+                    GameCountdown(value: duel.match.countdown, title: "READY YOUR BLADES",
+                                  hint: duel.match.recovering ? "Waiting for both controllers…" : "Blue attacks right. Orange attacks left.")
+                }
+                if duel.match.phase == .playing && duel.match.recovering {
+                    Label("Waiting for controller… Match clock held.", systemImage: "gamecontroller")
+                        .font(WiiTheme.display(16)).padding(22).wiiPanel(radius: 20)
+                }
+                if duel.match.phase == .paused { paused }
+                if duel.match.phase == .results { results }
             }
-            if duel.match.phase == .playing && duel.match.recovering {
-                Text("Waiting for controller… Match clock held.").padding(20).wiiPanel()
-            }
-            if duel.match.phase == .paused { paused }
-            if duel.match.phase == .results { results }
-        }.foregroundStyle(WiiTheme.ink).tint(WiiTheme.accentDeep)
+        }.foregroundStyle(WiiTheme.ink).tint(accent)
             .sheet(isPresented: $setup) { ControllerSetupView(motion: motion, done: { setup = false }) }
             .onChange(of: setup) { if setup { duel.pause("Controller setup is open.") } }
     }
-    private func player(_ slot: PlayerSlot, name: String, color: Color) -> some View {
+
+    private func player(_ slot: PlayerSlot, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("PLAYER \(slot.rawValue + 1) · \(slot == .one ? "BLUE" : "ORANGE")").font(.caption.bold()).foregroundStyle(color)
-            Text(name).font(.title3.bold())
-            HStack(spacing: 5) {
+            Text("PLAYER \(slot.rawValue + 1) · \(slot == .one ? "BLUE" : "ORANGE")")
+                .font(WiiTheme.display(11)).tracking(1).foregroundStyle(color)
+            Text(duel.name(slot)).font(WiiTheme.display(18)).lineLimit(1)
+            HStack(spacing: 7) {
                 ForEach(0..<5) { index in
                     Image(systemName: index < duel.match.health[slot.rawValue] ? "heart.fill" : "heart")
-                        .foregroundStyle(color)
+                        .font(.system(size: 21)).foregroundStyle(index < duel.match.health[slot.rawValue] ? color : .white.opacity(0.3))
+                }
+            }.accessibilityElement(children: .ignore).accessibilityLabel("\(duel.match.health[slot.rawValue]) of 5 health")
+        }.frame(width: 220, alignment: .leading).foregroundStyle(.white).gameReadout()
+    }
+
+    private var lobby: some View {
+        GameLobby(identity: .duel) {
+            HStack {
+                GameMetric(value: "2", label: "PLAYERS")
+                GameMetric(value: "5", label: "HEALTH EACH")
+                GameMetric(value: "60", label: "SECONDS")
+            }.padding(.vertical, 3)
+            GameRule(symbol: "burst.fill", title: "Attack their target",
+                     detail: "Blue swings right. Orange swings left. Each hit takes one health.", color: accent)
+            GameRule(symbol: "shield.lefthalf.filled", title: "Cross blades to block",
+                     detail: "Protect your target. Most health at the buzzer wins.", color: accent)
+        } options: {
+            HStack {
+                Text("Bring a rival").font(WiiTheme.display(22))
+                Spacer(); Image(systemName: "person.2.fill").foregroundStyle(accent)
+            }
+            Text("One AirPod + one iPhone. Pick who plays blue, then get both controllers ready.")
+                .font(WiiTheme.body(13)).foregroundStyle(WiiTheme.inkSoft)
+            VStack(spacing: 10) {
+                ForEach(PlayerSlot.allCases, id: \.self) { slot in
+                    HStack(spacing: 13) {
+                        Text("\(slot.rawValue + 1)").font(WiiTheme.display(20))
+                            .frame(width: 44, height: 44).foregroundStyle(.white)
+                            .background(slot == .one ? WiiTheme.accentDeep : Color(red: 0.8, green: 0.43, blue: 0.16), in: RoundedRectangle(cornerRadius: 13))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(duel.name(slot)).font(WiiTheme.display(15))
+                            Label(duel.ready[slot.rawValue] ? "Ready to play" : "Connect & recenter", systemImage: duel.ready[slot.rawValue] ? "checkmark.circle.fill" : "circle.dotted")
+                                .font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
+                        }
+                        Spacer(minLength: 0)
+                        Text(slot == .one ? "BLUE" : "ORANGE").font(WiiTheme.display(10)).foregroundStyle(WiiTheme.inkSoft)
+                    }.padding(14).background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 16))
+                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(WiiTheme.hairline, lineWidth: 1))
                 }
             }
-            Label(duel.ready[slot.rawValue] ? "Ready" : "Waiting for motion", systemImage: duel.ready[slot.rawValue] ? "checkmark.circle.fill" : "circle.dotted")
-                .font(.caption).foregroundStyle(duel.ready[slot.rawValue] ? Color(red: 0.24, green: 0.63, blue: 0.18) : .secondary)
-        }.padding(18).frame(minWidth: 210, alignment: .leading).wiiPanel()
+            if !duel.scripted && !motion.controllers.phoneHost.connected {
+                VStack(alignment: .leading, spacing: 7) {
+                    Label("Pair your iPhone", systemImage: "iphone").font(WiiTheme.display(13))
+                    Text("Open Aircade Controller, select this Mac, and enter:")
+                        .font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
+                    Text(duel.code.isEmpty ? "Starting…" : duel.code)
+                        .font(.system(size: 28, weight: .semibold, design: .rounded)).tracking(5).textSelection(.enabled)
+                }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+            }
+            MotionButton { setup = true } label: {
+                HStack {
+                    Label("Set up & assign controllers", systemImage: "gamecontroller.fill")
+                    Spacer(); Image(systemName: "chevron.right")
+                }.font(WiiTheme.display(13)).foregroundStyle(accent).padding(.vertical, 8).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+            MotionButton {
+                if duel.bothReady { duel.start() } else { setup = true }
+            } label: {
+                GamePrimaryAction(title: duel.bothReady ? "Start duel" : "Connect players", symbol: duel.bothReady ? "play.fill" : "gamecontroller.fill", accent: accent)
+            }.buttonStyle(GameActionStyle())
+            MotionButton {
+                duel.setScripted(!duel.scripted)
+                if duel.scripted { duel.tick(); duel.start() }
+            } label: {
+                Label(duel.scripted ? "Use real controllers" : "Watch a demo duel", systemImage: "play.rectangle")
+                    .frame(maxWidth: .infinity)
+            }.buttonStyle(WiiButtonStyle())
+            Text("One AirPods pair provides one player.")
+                .font(WiiTheme.body(11)).foregroundStyle(WiiTheme.inkSoft).frame(maxWidth: .infinity)
+        }
     }
-    private var lobby: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Label("BETTER WITH A RIVAL", systemImage: "person.2.fill").font(.caption.bold()).foregroundStyle(WiiTheme.accentDeep)
-            Text("Your couch. Your arena.").font(.system(size: 32, weight: .bold)).italic()
-            Text("Two independent controllers. One shared screen.").foregroundStyle(.secondary)
-            ControllerSelectionPanel(motion: motion, controllers: motion.controllers, duel: true)
-            MotionButton("AirPod grip setup") { setup = true }.buttonStyle(WiiButtonStyle())
-            Text("Both controllers stay connected when you switch games. Blue attacks right; orange attacks left.")
-                .font(.callout).foregroundStyle(.secondary)
-            MotionButton { duel.start() } label: {
-                HStack { Text(duel.bothReady ? "Start duel" : "Waiting for both controllers"); Spacer(); Image(systemName: "arrow.right") }
-                    .font(.headline)
-            }.buttonStyle(WiiButtonStyle(primary: true)).disabled(!duel.bothReady)
-            HStack {
-                MotionButton(duel.scripted ? "Use real controllers" : "Watch scripted duel") {
-                    duel.setScripted(!duel.scripted)
-                    if duel.scripted { duel.tick(); duel.start() }
-                }.buttonStyle(.plain).foregroundStyle(WiiTheme.accentDeep)
-                Spacer()
-                Text("One AirPods pair = one player").foregroundStyle(.secondary)
-            }.font(.caption)
-        }.padding(28).frame(width: 590).wiiPanel()
-    }
+
     private var paused: some View {
-        VStack(spacing: 20) {
-            Text("Time out.").font(.system(size: 40, weight: .bold)).italic()
-            Text(duel.match.pauseReason).multilineTextAlignment(.center).foregroundStyle(.secondary)
-            MotionButton("Resume duel") { duel.resume() }.buttonStyle(WiiButtonStyle(primary: true)).disabled(!duel.bothReady)
-            HStack(spacing: 24) {
+        GameOverlay {
+            Image(systemName: "pause.circle.fill").font(.system(size: 40)).foregroundStyle(accent)
+            Text("Time out").font(WiiTheme.display(36))
+            Text(duel.match.pauseReason).multilineTextAlignment(.center).foregroundStyle(WiiTheme.inkSoft)
+            HStack(spacing: 20) {
+                readiness(.one)
+                readiness(.two)
+            }
+            MotionButton { duel.resume() } label: { GamePrimaryAction(title: "Resume duel", accent: accent) }
+                .buttonStyle(GameActionStyle()).disabled(!duel.bothReady)
+            HStack(spacing: 16) {
                 MotionButton("Controller setup") { setup = true }
                 MotionButton("Back to lobby") { duel.lobby() }
-            }.buttonStyle(.plain).foregroundStyle(WiiTheme.accentDeep)
-        }.padding(35).frame(width: 520).wiiPanel()
+            }.buttonStyle(WiiButtonStyle())
+        }
+    }
+    private func readiness(_ slot: PlayerSlot) -> some View {
+        Label("\(slot == .one ? "Blue" : "Orange") · \(duel.ready[slot.rawValue] ? "Ready" : "Waiting")",
+              systemImage: duel.ready[slot.rawValue] ? "checkmark.circle.fill" : "circle.dotted")
+            .font(WiiTheme.display(13)).foregroundStyle(WiiTheme.inkSoft)
     }
     private var results: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "trophy.fill").font(.system(size: 52)).foregroundStyle(.orange)
+        GameOverlay {
+            Image(systemName: duel.match.winner == nil ? "equal.circle.fill" : "trophy.fill")
+                .font(.system(size: 52)).foregroundStyle(duel.match.winner == .two ? .orange : accent)
             Text(duel.match.winner.map { $0 == .one ? "Blue wins!" : "Orange wins!" } ?? "It’s a draw!")
-                .font(.system(size: 44, weight: .bold)).italic()
-            Text("Blue \(duel.match.health[0]) — \(duel.match.health[1]) Orange").font(.title2)
-            if duel.scripted { Text("Scripted inputs · hardware not verified").font(.caption).foregroundStyle(.secondary) }
-            MotionButton("Rematch") { duel.start() }.buttonStyle(WiiButtonStyle(primary: true)).disabled(!duel.bothReady)
-            MotionButton("Back to lobby") { duel.lobby() }.buttonStyle(.plain).foregroundStyle(WiiTheme.accentDeep)
-        }.padding(36).frame(width: 440).wiiPanel()
+                .font(WiiTheme.display(44))
+            Text(duel.match.winner.map { "\(duel.name($0)) takes the arena." } ?? "Evenly matched. Settle it with a rematch.")
+                .font(WiiTheme.body(15)).foregroundStyle(WiiTheme.inkSoft)
+            HStack(spacing: 24) {
+                GameMetric(value: "\(duel.match.health[0]) / 5", label: "BLUE HEALTH")
+                GameMetric(value: "\(duel.match.health[1]) / 5", label: "ORANGE HEALTH")
+            }.padding(20).background(accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+            if duel.scripted { Text("Demo duel · simulated controllers").font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft) }
+            MotionButton { duel.start() } label: { GamePrimaryAction(title: "Rematch", accent: accent) }
+                .buttonStyle(GameActionStyle()).disabled(!duel.bothReady)
+            HStack(spacing: 16) {
+                MotionButton("Back to lobby") { duel.lobby() }
+                MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
+                if !duel.bothReady { MotionButton("Controller setup") { setup = true } }
+            }.buttonStyle(WiiButtonStyle())
+        }
     }
 }

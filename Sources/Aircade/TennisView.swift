@@ -9,7 +9,8 @@ struct TennisView: View {
     @State private var restoreCamera = false
     @State private var showingSetup = false
     @State private var showingCodexPrompt = false
-    private let courtBlue = WiiTheme.accentDeep
+    private let courtBlue = GameIdentity.tennis.accent
+    private var canStartRally: Bool { game.opponentReady || motion.activeInputSimulated }
 
     var body: some View {
         ZStack {
@@ -58,111 +59,74 @@ struct TennisView: View {
     }
 
     private var menu: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 16) {
-                Text("aircade").foregroundStyle(courtBlue).font(.system(size: 34, weight: .medium)).tracking(-1)
-                Rectangle().fill(courtBlue.opacity(0.25)).frame(width: 1, height: 30)
-                MotionButton("Neon Rush") { motion.selectSport(.neonRush) }.buttonStyle(.plain).foregroundStyle(.secondary)
-                Text("Tennis").fontWeight(.bold).foregroundStyle(courtBlue)
-                Spacer()
-                if let player = players.player {
-                    MotionButton { players.showingSignIn = true } label: { Label(player.nickname, systemImage: "person.crop.circle.fill") }.buttonStyle(WiiButtonStyle())
-                    MotionButton("Log out") { players.logout() }.buttonStyle(WiiButtonStyle())
-                } else {
-                    MotionButton("Scan badge") { players.showingSignIn = true }.buttonStyle(WiiButtonStyle()).disabled(!players.profilesAvailable)
-                }
-                MotionButton { NSWorkspace.shared.open(players.leaderboardURL) } label: { Image(systemName: "trophy") }.help("Open leaderboard").disabled(!players.profilesAvailable)
-                ActiveControllerBadge(motion: motion, controllers: motion.controllers)
-                MotionButton { showingSetup = true } label: { Label("Controller", systemImage: "airpodspro") }.buttonStyle(WiiButtonStyle())
-            }.padding(.horizontal, 34).padding(.vertical, 20).background(.white.opacity(0.96))
-
-            HStack(alignment: .top, spacing: 26) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Label(game.codexPractice ? "CODEX · COMPUTER CONTROL" : "\(game.tacticalProvider == "jev" ? "JEV" : "BASETEN") · NORMAL SPEED", systemImage: "figure.tennis")
-                        .font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(courtBlue)
-                    Text("Tennis").font(.system(size: 52, weight: .bold)).tracking(-2)
-                    Text("Keep the rally alive for 60 seconds.").font(.system(size: 19, weight: .medium))
-                    Text("Your player runs to the ball automatically. Swing your AirPod or iPhone to make contact. The model chooses the rival’s shot direction and pace.")
-                        .font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(4)
-                    HStack(spacing: 34) {
-                        stat("60", "SECONDS")
-                        stat("5", "BALLS")
-                        stat(game.opponentReady ? "AI" : "WAIT", "RIVAL")
-                    }.padding(.vertical, 8)
-                    Divider()
-                    VStack(alignment: .leading, spacing: 12) {
-                        rule("1", "WATCH", "Track the yellow ball as it clears the net.")
-                        rule("2", "SWING", "Meet it near your racket with a deliberate stroke.")
-                        rule("3", "RALLY", "Watch the rival move into position and answer your shot.")
-                    }
-                    MotionButton(id: "start-tennis") {
-                        if game.inputReady { if game.opponentReady { game.start(demo: motion.activeInputSimulated) } else { game.prepareOpponent() } }
-                        else { showingSetup = true }
-                    } label: {
-                        HStack {
-                            Image(systemName: "play.circle.fill").font(.title2)
-                            Text(game.inputReady ? (!game.opponentReady ? "Prepare model · tap to retry" : players.player == nil ? "Play as guest" : "Start rally") : "Connect your controller")
-                            Spacer(); Image(systemName: "chevron.right")
-                        }.font(.system(size: 18, weight: .bold)).padding(.vertical, 6)
-                    }.buttonStyle(WiiButtonStyle(primary: true))
-                }.padding(24).frame(width: 450).wiiPanel()
-
-                VStack(alignment: .trailing, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label(players.player?.nickname ?? "Guest", systemImage: "person.crop.circle.fill").fontWeight(.semibold)
-                        Text("TENNIS HIGH SCORE").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(.secondary)
-                        Text((players.player == nil ? game.bestScore : players.bests["Tennis", default: 0]).formatted())
-                            .font(.system(size: 30, weight: .bold)).monospacedDigit().foregroundStyle(courtBlue)
-                        Text(players.player == nil ? "Best on this Mac" : "Saved to your badge profile").font(.caption).foregroundStyle(.secondary)
-                    }.padding(16).frame(width: 300, alignment: .leading).wiiPanel()
-                    if let standing = players.standings["Tennis"] {
-                        Text(standing.challenge).font(.callout).padding(16).frame(width: 300, alignment: .leading).wiiPanel()
-                    }
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("AI CHALLENGERS", systemImage: "eye").font(.caption.bold())
-                        Text("Choose your rival").font(.title2.bold())
-                        Text("Use a model rival, or let Codex control the visible opponent with its mouse.").font(.callout).foregroundStyle(.secondary)
-                        HStack {
-                            MotionButton {
-                                game.selectTacticalOpponent("baseten")
-                            } label: {
-                                Label("Baseten", systemImage: !game.codexPractice && game.tacticalProvider == "baseten" ? "checkmark.circle.fill" : "circle")
-                            }
-                            .buttonStyle(WiiButtonStyle(primary: !game.codexPractice && game.tacticalProvider == "baseten"))
-
-                            MotionButton {
-                                game.selectTacticalOpponent("jev")
-                            } label: {
-                                Label("Jev", systemImage: !game.codexPractice && game.tacticalProvider == "jev" ? "checkmark.circle.fill" : "circle")
-                            }
-                            .buttonStyle(WiiButtonStyle(primary: !game.codexPractice && game.tacticalProvider == "jev"))
-                        }
-                        MotionButton {
-                            game.selectCodexOpponent()
-                            showingCodexPrompt = true
-                        } label: {
-                            Label("Codex · computer use", systemImage: game.codexPractice ? "checkmark.circle.fill" : "cursorarrow.motionlines")
-                        }
-                        .buttonStyle(WiiButtonStyle(primary: game.codexPractice))
-                    }.padding(20).frame(width: 300).wiiPanel()
-                    Spacer()
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("MODEL OPPONENT").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(courtBlue)
-                        Text(game.codexPractice
-                             ? "Codex watches this window, drags the far player into position, and presses Rival Swing. No game API or Astra service is used."
-                             : "Automatic running keeps rallies fluid. The selected model chooses direction and pace; its last valid shot stays active while the next decision loads.")
-                            .font(.callout).foregroundStyle(.secondary)
-                        Text(game.codexPractice ? "LOCAL · WAITING FOR CODEX" : game.opponentStatus.label)
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(game.codexPractice ? courtBlue : game.opponentStatus.fallbackUsed ? .orange : .green)
-                    }.padding(20).frame(width: 300).wiiPanel()
-                }.frame(maxWidth: .infinity, alignment: .trailing)
-            }.padding(24)
-            Spacer(minLength: 0)
+        GameLobby(identity: .tennis) {
             HStack {
-                Label(game.inputReady ? "\(motion.activeControllerName) ready" : "Choose an AirPod or iPhone to get started", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
-                Spacer(); Text("Ⓡ  Recenter")
-            }.font(.system(size: 13, weight: .medium)).padding(.horizontal, 34).padding(.vertical, 16).background(.white.opacity(0.96))
+                GameMetric(value: "60", label: "SECONDS")
+                GameMetric(value: "5", label: "BALLS")
+                GameMetric(value: "∞", label: "ONE MORE RALLY")
+            }.padding(.vertical, 3)
+            GameRule(symbol: "figure.tennis", title: "You swing. Your player runs.",
+                     detail: "Meet the ball near your racket with a deliberate stroke.", color: courtBlue)
+            GameRule(symbol: "arrow.triangle.2.circlepath", title: "Keep the rally alive",
+                     detail: "Time your returns, build a streak, and beat your best.", color: courtBlue)
+        } options: {
+            HStack {
+                Text("Choose your rival").font(WiiTheme.display(22))
+                Spacer()
+                Image(systemName: "figure.tennis").foregroundStyle(courtBlue)
+            }
+            VStack(spacing: 10) {
+                MotionButton { game.selectTacticalOpponent("baseten") } label: {
+                    GameOption(title: "Baseten", detail: "Model rival · normal speed", symbol: "sparkles",
+                               selected: !game.codexPractice && game.tacticalProvider == "baseten", accent: courtBlue)
+                }
+                MotionButton { game.selectTacticalOpponent("jev") } label: {
+                    GameOption(title: "Jev", detail: "A different rival. A fresh challenge.", symbol: "bolt.fill",
+                               selected: !game.codexPractice && game.tacticalProvider == "jev", accent: courtBlue)
+                }
+                MotionButton { game.selectCodexOpponent(); showingCodexPrompt = true } label: {
+                    GameOption(title: "Codex", detail: "Computer-controlled practice · unranked", symbol: "cursorarrow.motionlines",
+                               selected: game.codexPractice, accent: courtBlue)
+                }
+            }.buttonStyle(GameActionStyle())
+            if game.codexPractice {
+                MotionButton("Copy instructions for Codex") { showingCodexPrompt = true }
+                    .buttonStyle(.plain).foregroundStyle(courtBlue).font(WiiTheme.body(12, .semibold))
+            }
+            HStack(spacing: 8) {
+                Image(systemName: canStartRally ? "checkmark.circle.fill" : "clock")
+                Text(motion.activeInputSimulated ? "Demo ready · score not saved" : game.codexPractice ? "Practice ready · invite Codex to play" : game.opponentStatus.label)
+                    .fixedSize(horizontal: false, vertical: true)
+            }.font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
+            Divider()
+            MotionButton { showingSetup = true } label: {
+                HStack {
+                    Image(systemName: "gamecontroller.fill")
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(game.inputReady ? "Controller ready" : "Connect a controller").font(WiiTheme.display(14))
+                        Text(game.inputReady ? motion.activeControllerName : "AirPod or iPhone").font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
+                    }
+                    Spacer(); Image(systemName: "chevron.right")
+                }.foregroundStyle(courtBlue).padding(.vertical, 4).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+            MotionButton(id: "start-tennis") {
+                if !game.inputReady { showingSetup = true }
+                else if !canStartRally { game.prepareOpponent() }
+                else { game.start(demo: motion.activeInputSimulated) }
+            } label: {
+                GamePrimaryAction(title: !game.inputReady ? "Connect & play" : !canStartRally ? "Prepare rival · retry" : motion.activeInputSimulated ? "Start demo rally" : "Start rally",
+                                  symbol: game.inputReady ? "play.fill" : "gamecontroller.fill", accent: courtBlue)
+            }.buttonStyle(GameActionStyle())
+            HStack(spacing: 8) {
+                Image(systemName: "trophy.fill").foregroundStyle(courtBlue)
+                Text("Best  \((players.player == nil ? game.bestScore : players.bests["Tennis", default: 0]).formatted())").font(WiiTheme.display(13))
+                Spacer()
+                MotionButton(players.player?.nickname ?? "Guest") { players.showingSignIn = true }
+                    .buttonStyle(.plain).font(WiiTheme.body(12)).foregroundStyle(courtBlue).disabled(!players.profilesAvailable)
+            }
+            if let standing = players.standings["Tennis"] {
+                Text(standing.challenge).font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
+            }
         }
     }
 
@@ -170,16 +134,16 @@ struct TennisView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(players.player?.nickname ?? "Player") · SCORE").font(.system(size: 12, weight: .semibold))
-                Text(game.state.score.formatted()).font(.system(size: 38, weight: .semibold)).monospacedDigit()
-                Text("Rally \(game.state.rally) · Best \(game.state.longestRally)").font(.system(size: 12))
-            }.frame(width: 215, alignment: .leading).wiiReadout()
+                Text(game.state.score.formatted()).font(WiiTheme.display(38)).monospacedDigit()
+                Text("\(game.state.rally) rally  /  \(game.state.longestRally) best").font(.system(size: 12))
+            }.frame(width: 215, alignment: .leading).gameReadout()
             Spacer()
             VStack(spacing: 4) {
                 Text("RALLY CHALLENGE").font(.system(size: 11, weight: .semibold)).tracking(1)
                 Text(String(format: "%d:%02d", Int(ceil(game.state.remaining)) / 60, Int(ceil(game.state.remaining)) % 60))
-                    .font(.system(size: 34, weight: .medium)).monospacedDigit()
+                    .font(WiiTheme.display(34, .semibold)).monospacedDigit()
                 ProgressView(value: game.state.remaining, total: TennisMatch.duration).tint(.white).frame(width: 116)
-            }.wiiReadout()
+            }.gameReadout()
             Spacer()
             VStack(alignment: .trailing, spacing: 9) {
                 HStack {
@@ -191,15 +155,16 @@ struct TennisView: View {
                             .accessibilityLabel("Swing opponent racket")
                     }
                     Text("BALLS").font(.system(size: 12, weight: .semibold)).tracking(1)
-                    MotionButton { game.pause() } label: { Image(systemName: "pause.fill") }.buttonStyle(.plain)
+                    MotionButton { game.pause() } label: { Image(systemName: "pause.fill").frame(width: 40, height: 36).background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10)) }.buttonStyle(.plain).accessibilityLabel("Pause tennis")
                 }
                 HStack(spacing: 7) {
                     ForEach(0..<TennisMatch.startingBalls, id: \.self) { index in
                         Circle().fill(index < game.state.ballsLeft ? Color.yellow : .black.opacity(0.45)).frame(width: 18, height: 18)
                     }
                 }
-            }.wiiReadout()
+            }.gameReadout()
         }.foregroundStyle(.white).padding(24)
+            .allowsHitTesting(game.state.phase == .playing || game.state.phase == .countdown)
     }
 
     private var directOpponentSurface: some View {
@@ -221,33 +186,30 @@ struct TennisView: View {
 
     private var footer: some View {
         HStack {
-            Text("Tennis").font(.system(size: 17, weight: .semibold)).italic()
-            Text(game.state.assistedOpponent ? "CODEX PRACTICE · Drag rival, then swing · Unranked" : game.opponentStatus.label).font(.system(size: 10, weight: .bold))
-                .foregroundStyle(game.opponentStatus.fallbackUsed ? .yellow : .green)
-            Spacer(); ActiveControllerBadge(motion: motion, controllers: motion.controllers)
+            Text("Tennis").font(WiiTheme.display(16))
+            Text(game.isDemo ? "DEMO · SCORE NOT SAVED" : game.state.assistedOpponent ? "CODEX PRACTICE · Drag rival, then swing · Unranked" : "Meet the ball. Keep the rally alive.").font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white.opacity(0.8))
+            Spacer(); Label(motion.activeControllerName, systemImage: "gamecontroller.fill").font(WiiTheme.body(12, .semibold))
             Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
-            MotionButton { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash") }.buttonStyle(.plain)
+            MotionButton { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash").frame(width: 36, height: 36) }.buttonStyle(.plain).accessibilityLabel(game.sound ? "Mute sound" : "Enable sound")
         }.foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 2, y: 1)
             .padding(24).background(LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom))
     }
 
     private var countdown: some View {
-        VStack(spacing: 10) {
-            Text("READY YOUR RACKET").font(.system(size: 14, weight: .semibold)).tracking(2).foregroundStyle(.white)
-            Text("\(max(1, Int(ceil(game.state.countdown))))").font(.system(size: 130, weight: .bold)).italic().foregroundStyle(.yellow)
-            Text("Swing when the ball reaches you.").foregroundStyle(.white)
-        }.shadow(color: .black.opacity(0.6), radius: 2, y: 1).frame(maxWidth: .infinity, maxHeight: .infinity).background(.black.opacity(0.25))
+        GameCountdown(value: game.state.countdown, title: "READY YOUR RACKET", hint: "Swing when the ball reaches you.")
     }
 
     private var pauseCard: some View {
         card {
-            Text("Match paused").font(.system(size: 42, weight: .bold)).italic()
-            Text(game.pauseReason).foregroundStyle(.secondary)
+            Image(systemName: "pause.circle.fill").font(.system(size: 40)).foregroundStyle(courtBlue)
+            Text("Match paused").font(WiiTheme.display(36))
+            Text(game.pauseReason).foregroundStyle(WiiTheme.inkSoft).multilineTextAlignment(.center)
             Label(game.inputReady ? "\(motion.activeControllerName) ready" : "Waiting for \(motion.activeControllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
                 .foregroundStyle(game.inputReady ? courtBlue : .orange)
             actionButton("Back to the court") { game.resume() }.disabled(!game.inputReady)
             HStack(spacing: 22) { MotionButton("Controller setup") { showingSetup = true }; MotionButton("End run") { game.leave() } }
-                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .buttonStyle(WiiButtonStyle())
         }
     }
 
@@ -255,9 +217,9 @@ struct TennisView: View {
         card {
             Text(game.state.completed ? "TIME" : "GAME OVER").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(3).foregroundStyle(courtBlue)
             HStack(spacing: 28) {
-                Text(game.state.completed ? game.state.rank : "↻").font(.system(size: 78, weight: .bold)).italic().foregroundStyle(courtBlue)
+                Text(game.state.completed ? game.state.rank : "↻").font(WiiTheme.display(78)).foregroundStyle(courtBlue)
                 VStack(alignment: .leading) {
-                    Text(game.state.score.formatted()).font(.system(size: 52, weight: .bold)).monospacedDigit()
+                    Text(game.state.score.formatted()).font(WiiTheme.display(52)).monospacedDigit()
                     Text(game.isDemo ? "SIMULATED RUN · NOT SAVED" : players.bests["Tennis"].map { "YOUR BEST \($0.formatted())" } ?? "BEST ON THIS MAC \(game.bestScore.formatted())")
                         .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
                 }
@@ -270,38 +232,25 @@ struct TennisView: View {
             RankProgressCard(players: players, runID: game.runID)
             Text(game.state.assistedOpponent ? "Practice run — score not saved." : players.saveStatus).font(.caption).foregroundStyle(.secondary)
             actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
-            HStack(spacing: 24) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
                 MotionButton("Next player") { game.leave(); players.nextPlayer() }
+                if !game.inputReady { MotionButton("Connect controller") { showingSetup = true } }
                 MotionButton("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: "Tennis")) }
-            }.buttonStyle(.plain).foregroundStyle(.secondary)
+            }.buttonStyle(WiiButtonStyle())
         }
     }
 
     private func card<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
-        GeometryReader { geometry in
-            ZStack {
-                courtBlue.opacity(0.22)
-                ScrollView {
-                    VStack(spacing: 22, content: content).padding(38).frame(width: 600).wiiPanel()
-                        .padding(.vertical, 16)
-                        .frame(maxWidth: .infinity, minHeight: geometry.size.height)
-                }.scrollIndicators(.hidden)
-            }
-        }
+        GameOverlay(content: content)
     }
     private func actionButton(_ title: String, action: @escaping () -> Void) -> some View {
-        MotionButton(action: action) { HStack { Text(title); Spacer(); Image(systemName: "arrow.right") }.font(.system(size: 13, weight: .bold, design: .monospaced)).padding(18).foregroundStyle(.white).background(courtBlue, in: RoundedRectangle(cornerRadius: 6)) }.buttonStyle(.plain)
+        MotionButton(action: action) { GamePrimaryAction(title: title, accent: courtBlue) }.buttonStyle(GameActionStyle())
     }
     private func stat(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) { Text(value).font(.system(size: 24, weight: .bold)).monospacedDigit(); Text(label).font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(1).foregroundStyle(.secondary) }
+        GameMetric(value: value, label: label)
     }
-    private func rule(_ number: String, _ title: String, _ subtitle: String) -> some View {
-        HStack(spacing: 14) {
-            Text(number).font(.system(size: 16, weight: .bold)).frame(width: 36, height: 36).foregroundStyle(courtBlue).background(courtBlue.opacity(0.08), in: Circle())
-            VStack(alignment: .leading, spacing: 3) { Text(title).font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1); Text(subtitle).font(.caption).foregroundStyle(.secondary) }
-        }
-    }
+
 }
 
 private struct CodexOpponentPrompt: View {
