@@ -58,13 +58,24 @@ final class HandTracker: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
         stop()
         generation += 1
         let token = generation
-        status = "Requesting camera access…"
-        AVCaptureDevice.requestAccess(for: .video) { [weak self] allowed in
-            DispatchQueue.main.async {
-                guard let self, self.generation == token else { return }
-                guard allowed else { self.status = "Camera denied · enable it in Privacy & Security → Camera"; return }
-                self.configure(token: token)
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            configure(token: token)
+        case .notDetermined:
+            status = "Allow camera access once to scan badges"
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] allowed in
+                DispatchQueue.main.async {
+                    guard let self, self.generation == token else { return }
+                    guard allowed else { self.status = "Camera denied · enable it in Privacy & Security → Camera"; return }
+                    self.configure(token: token)
+                }
             }
+        case .denied:
+            status = "Camera denied · enable Aircade in Privacy & Security → Camera"
+        case .restricted:
+            status = "Camera access is restricted on this Mac"
+        @unknown default:
+            status = "Camera access is unavailable"
         }
     }
     private func configure(token: Int) {
