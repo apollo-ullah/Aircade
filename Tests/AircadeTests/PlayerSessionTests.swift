@@ -116,6 +116,27 @@ final class PlayerSessionTests: XCTestCase {
         XCTAssertTrue(players.pendingRuns.isEmpty)
     }
 
+    @MainActor
+    func testSavingProfileCompletesRunPromptOnlyAfterSuccessfulSave() async throws {
+        let config = StationConfiguration(url: "https://example.invalid", token: "test-only-token")
+        let updated = BadgePlayer(id: alice.id, nickname: "Rally Alice", isPublic: true)
+        let completed = expectation(description: "Run prompt continues after profile save")
+        let players = session(configuration: config) { request in
+            if request.httpMethod == "PATCH" {
+                return (try JSONEncoder().encode(updated), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+            return (Data("{}".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        players.player = alice
+        players.showingSignIn = true
+
+        players.saveProfile(nickname: updated.nickname, isPublic: true) { completed.fulfill() }
+
+        await fulfillment(of: [completed], timeout: 1)
+        XCTAssertEqual(players.player, updated)
+        XCTAssertFalse(players.showingSignIn)
+    }
+
     func testProfileOwnerAndVisibilityAreSnapshotsAcrossSwitchAndLogout() throws {
         let players = session()
         players.player = alice

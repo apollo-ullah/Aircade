@@ -252,7 +252,7 @@ final class PlayerSession: ObservableObject {
             } catch { if profileRevision == revision { message = error.localizedDescription } }
         }
     }
-    func saveProfile(nickname: String, isPublic: Bool) {
+    func saveProfile(nickname: String, isPublic: Bool, completion: @escaping () -> Void = {}) {
         guard let player, !busy else { return }
         busy = true
         let revision = profileRevision
@@ -265,7 +265,9 @@ final class PlayerSession: ObservableObject {
                 suggestedName = nil
                 standings = [:]; lastRankProgress = nil
                 refreshBests()
-                message = "Ready to play"; showingSignIn = false
+                message = "Ready to play"
+                completion()
+                showingSignIn = false
             } catch { if profileRevision == revision { message = error.localizedDescription } }
         }
     }

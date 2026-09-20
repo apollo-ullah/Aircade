@@ -10,6 +10,8 @@ struct TennisView: View {
     @State private var showingSetup = false
     @State private var showingCodexPrompt = false
     @State private var showingSensorEvidence = false
+    @State private var pendingRallyAfterIdentity = false
+    @State private var identityApproved = false
     private let courtBlue = GameIdentity.tennis.accent
     private var canStartRally: Bool { game.opponentReady || motion.activeInputSimulated }
 
@@ -56,7 +58,16 @@ struct TennisView: View {
         .sheet(isPresented: $players.showingSignIn, onDismiss: {
             if restoreCamera && motion.useCamera { motion.startCamera() }
             restoreCamera = false
-        }) { BadgeSignInView(players: players) }
+            if pendingRallyAfterIdentity {
+                let shouldStart = identityApproved
+                pendingRallyAfterIdentity = false
+                identityApproved = false
+                if shouldStart { game.start(demo: false) }
+            }
+        }) {
+            BadgeSignInView(players: players, runPrompt: pendingRallyAfterIdentity,
+                            onReady: pendingRallyAfterIdentity ? { identityApproved = true } : nil)
+        }
         .onChange(of: players.showingSignIn) {
             if players.showingSignIn {
                 game.pause("Player sign-in is open.")
@@ -128,7 +139,12 @@ struct TennisView: View {
             MotionButton(id: "start-tennis") {
                 if !game.liveReady { showingSetup = true }
                 else if !canStartRally { game.prepareOpponent() }
-                else { game.start(demo: motion.activeInputSimulated) }
+                else if motion.activeInputSimulated { game.start(demo: true) }
+                else {
+                    identityApproved = false
+                    pendingRallyAfterIdentity = true
+                    players.showingSignIn = true
+                }
             } label: {
                 GamePrimaryAction(title: !game.liveReady ? "Set up controller" : !canStartRally ? "Prepare rival · retry" : motion.activeInputSimulated ? "Start demo rally" : "Start rally",
                                   symbol: game.liveReady ? "play.fill" : "gamecontroller.fill", accent: courtBlue)

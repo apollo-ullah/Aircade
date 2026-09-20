@@ -2,6 +2,8 @@ import SwiftUI
 
 struct BadgeSignInView: View {
     @ObservedObject var players: PlayerSession
+    var runPrompt = false
+    var onReady: (() -> Void)? = nil
     @StateObject private var scanner = HandTracker()
     @State private var code = ""
     @State private var nickname = ""
@@ -9,12 +11,20 @@ struct BadgeSignInView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text(players.player == nil ? "Scan your hacker badge" : "Your player profile").font(.title2.bold())
+                Text(runPrompt ? (players.player == nil ? "Scan your badge for this rally" : "Who’s playing this rally?") : (players.player == nil ? "Scan your hacker badge" : "Your player profile"))
+                    .font(.title2.bold())
                 Spacer()
                 Button("Cancel") { players.showingSignIn = false }.disabled(players.busy)
             }
             if let player = players.player {
                 Label("Badge recognized", systemImage: "checkmark.circle.fill").foregroundStyle(Color(red: 0.24, green: 0.63, blue: 0.18))
+                if runPrompt, player.needsName != true, players.suggestedName == nil {
+                    Button("Play as \(player.nickname)") {
+                        onReady?()
+                        players.showingSignIn = false
+                    }
+                    .buttonStyle(WiiButtonStyle(primary: true))
+                }
                 VStack(alignment: .leading, spacing: 10) {
                     Text("YOUR HIGH SCORES").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(2).foregroundStyle(WiiTheme.accentDeep)
                     HStack(spacing: 36) {
@@ -28,7 +38,9 @@ struct BadgeSignInView: View {
                 TextField("Name or nickname (2–24 characters)", text: $nickname).textFieldStyle(.roundedBorder)
                 Toggle("Show my nickname and scores on the public leaderboard", isOn: $isPublic)
                 Text("Your badge QR is never shown publicly. Anyone viewing the leaderboard can see opted-in nicknames and results.").font(.caption).foregroundStyle(.secondary)
-                Button("Save profile") { players.saveProfile(nickname: nickname, isPublic: isPublic) }
+                Button(runPrompt ? "Save profile & start rally" : "Save profile") {
+                    players.saveProfile(nickname: nickname, isPublic: isPublic, completion: { onReady?() })
+                }
                     .buttonStyle(WiiButtonStyle(primary: true)).disabled(players.busy || nickname.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || nickname.count > 24)
                 Button("Scan a different badge") { players.player = nil; players.suggestedName = nil; code = "" }
                 Text("Player ID: \(player.id.prefix(8))").font(.caption).foregroundStyle(.secondary)
@@ -46,6 +58,16 @@ struct BadgeSignInView: View {
                     .onSubmit { players.signIn(code) }
                 Button("Use badge code") { players.signIn(code) }.disabled(players.busy || code.isEmpty)
                 Text("The full QR text is treated as a private identifier, not opened as a link. Name recognition stays on this Mac; only the name you confirm is saved. No email is needed.").font(.caption).foregroundStyle(.secondary)
+            }
+            if runPrompt {
+                Divider()
+                Button("Skip · play as guest") {
+                    onReady?()
+                    players.selectGuest()
+                }
+                .buttonStyle(WiiButtonStyle())
+                Text("Guest scores stay on this Mac. Scan a badge to save this rally to the shared leaderboard.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             if players.busy { ProgressView().controlSize(.small) }
             Text(players.message).font(.callout).fixedSize(horizontal: false, vertical: true)
