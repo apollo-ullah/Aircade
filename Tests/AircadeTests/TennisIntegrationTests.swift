@@ -24,6 +24,18 @@ final class TennisIntegrationTests: XCTestCase {
         XCTAssertEqual(rig.starts, [false, true])
     }
 
+    func testJevEnablesRallyAssistWithoutTurningTheRunIntoADemo() {
+        let rig = Rig(demo: false)
+        rig.game.leave()
+        rig.game.selectTacticalOpponent("jev")
+        rig.game.update(pose: rig.parked, time: rig.clock.time, ready: true)
+        rig.game.start(demo: false)
+
+        XCTAssertTrue(rig.game.state.rallyAssistOpponent)
+        XCTAssertFalse(rig.game.state.assistedOpponent)
+        XCTAssertFalse(rig.game.isDemo)
+    }
+
     func testAutomaticCourtCoverageDoesNotHitWithoutASwing() throws {
         struct WideOpponent: TennisOpponentStrategy {
             func returnPlan(rally: Int, sequence: Int) -> TennisOpponentReturn {

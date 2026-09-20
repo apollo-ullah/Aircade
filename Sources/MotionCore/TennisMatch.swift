@@ -116,6 +116,9 @@ public struct TennisMatch {
     private var pendingPlan: TennisOpponentReturn?
     private var opponentContactX: Float = 0
     public var assistedOpponent = false
+    /// A rally-friendly automatic rival reaches every valid player shot. The
+    /// model still chooses the return trajectory; this only helps court coverage.
+    public var rallyAssistOpponent = false
     private var manualOpponentX: Float?
     private var manualOpponentSwingAt: Double?
     private var sequence = 0
@@ -275,6 +278,8 @@ public struct TennisMatch {
         if let manualOpponentX {
             attemptedX = manualOpponentX
             manualOpponentSwingAt = nil
+        } else if rallyAssistOpponent {
+            attemptedX = aim
         } else {
             attemptedX = distance <= movement + 1
                 ? aim : opponentContactX + (aim < opponentContactX ? -1 : 1) * movement

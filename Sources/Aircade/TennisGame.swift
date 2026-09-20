@@ -106,6 +106,7 @@ final class TennisGame: ObservableObject {
         if !codexPractice { modelOpponent?.beginRun() }
         state.start()
         state.assistedOpponent = codexPractice
+        state.rallyAssistOpponent = !codexPractice && tacticalProvider == "jev"
         resultSaved = false
         newRecord = false
         feedback = ""

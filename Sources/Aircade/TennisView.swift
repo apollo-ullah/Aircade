@@ -113,7 +113,7 @@ struct TennisView: View {
                                selected: !game.codexPractice && game.tacticalProvider == "astra", accent: courtBlue)
                 }
                 MotionButton { game.selectTacticalOpponent("jev") } label: {
-                    GameOption(title: "Jev", detail: "Same state, shots and movement assistance", symbol: "bolt.fill",
+                    GameOption(title: "Jev", detail: "Rally assist · model-selected shots", symbol: "bolt.fill",
                                selected: !game.codexPractice && game.tacticalProvider == "jev", accent: courtBlue)
                 }
                 MotionButton { game.selectTacticalOpponent("baseten") } label: {
