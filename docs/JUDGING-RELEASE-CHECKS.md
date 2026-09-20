@@ -19,8 +19,8 @@ The implemented app is `build/Aircade.app` in this checkout. Start the configure
 
 | Check | Result and scope |
 | --- | --- |
-| Native test suite | 124 tests, 2 opt-in live tests skipped, 0 failures after the configuration repair. Following the final lobby-readiness fix, all 23 affected lifecycle, tennis, and tracking-recovery tests passed, including the new regression. |
-| Station suite | 25/25 passed, including isolated MongoDB integration, cold startup, provider validation, and fractional/early-wake scheduling. |
+| Native test suite | 125 tests, 2 opt-in live tests skipped, 0 failures after the final repository consolidation. |
+| Offline station suite | 23/23 passed, including cold startup, provider validation, and fractional/early-wake scheduling. |
 | Actual API contact check | One live request each for Baseten, Astra, and Jev; real native collision code produced a player return followed by the exact API-selected opponent return. Controller input was accelerated scripted motion, explicitly unranked. |
 | Corrected paired live run | 80/80 requests completed with legal decisions before the shared six-second deadline. Astra: 40/40, median 1,836.5 ms. Jev: 40/40, median 322 ms. Twenty fixed synthetic states repeated twice per provider; this does not measure tennis ability. |
 | Final-build sensor capture | 552 fresh Left AirPod samples over 17.985 seconds, all marked calibrated and non-simulated, with the original reference/grip/racket output. Recorded replay was exercised through the UI. This nearly stationary trace contains no contact events; it does not verify a handheld swing. |
@@ -42,8 +42,10 @@ The final signed release also compiles the presentation changes that expose evid
 - `build/judging-preview-final/`: final native layout screenshots and result JSON.
 - `docs/JUDGING-SUBMISSION-DRAFT.md`, `docs/SUBMISSION-AUDIT.md`: demo script and prepared replacement submission text.
 
-## Physical and publication work still needed
+## Physical work still needed
 
 The AirPod initially supplied no motion, then began sending live Left-earbud readings. The final-build capture and replay passed; no physical hold condition or swing was independently observed. No unfamiliar-player first-hit time, physical calibration quality, or three consecutive physical rehearsals is claimed. Use `docs/JUDGING-UX-TEST-SHEET.md` to measure those with the final app. A first hit within ten seconds remains a target, not a verified result.
 
-The existing Devpost entry is submitted and has a 54-second physical-demo video. Its AI explanation currently says only “yes,” its source/build URL is empty, and the displayed repository is private. Prepared replacement copy and local packages are ready for the team's chosen distribution route; no external content or repository visibility was changed. The existing recording does not establish coverage of the new API and sensor screens. Finalist selection cannot be guaranteed by the pitch or this build.
+The Devpost entry is submitted and public. Its rewritten story explains the OpenAI API, Astra, Codex development, the separate computer-use experiment, and the corrected comparison. It includes the public GitHub link and seven gallery entries. The existing 54-second recording does not establish coverage of the new API and sensor screens. Finalist selection cannot be guaranteed by the pitch or this build.
+
+Use `docs/FINAL-JUDGING-CHECKLIST.md` for the remaining human rehearsal, device, audio, and claim checks.
