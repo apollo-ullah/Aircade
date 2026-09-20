@@ -20,7 +20,7 @@ The implemented app is `build/Aircade.app` in this checkout. Start the configure
 | Check | Result and scope |
 | --- | --- |
 | Native test suite | 125 tests, 2 opt-in live tests skipped, 0 failures after the final repository consolidation. |
-| Offline station suite | 23/23 passed, including cold startup, provider validation, and fractional/early-wake scheduling. |
+| Station suite | 25/25 passed, including isolated MongoDB integration, cold startup, provider validation, and fractional/early-wake scheduling. The offline subset also passed 23/23. |
 | Actual API contact check | One live request each for Baseten, Astra, and Jev; real native collision code produced a player return followed by the exact API-selected opponent return. Controller input was accelerated scripted motion, explicitly unranked. |
 | Corrected paired live run | 80/80 requests completed with legal decisions before the shared six-second deadline. Astra: 40/40, median 1,836.5 ms. Jev: 40/40, median 322 ms. Twenty fixed synthetic states repeated twice per provider; this does not measure tennis ability. |
 | Final-build sensor capture | 552 fresh Left AirPod samples over 17.985 seconds, all marked calibrated and non-simulated, with the original reference/grip/racket output. Recorded replay was exercised through the UI. This nearly stationary trace contains no contact events; it does not verify a handheld swing. |
