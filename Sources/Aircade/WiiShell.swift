@@ -8,6 +8,7 @@ struct WiiShell: View {
     @ObservedObject private var menu: ControllerMenu
     @State private var window: NSWindow?
     @State private var route: Route
+    @State private var showingSensorEvidence = false
     // MotionModel publishes every sensor frame. Preserve this publisher when
     // ContentView reconstructs the shell, or updates can keep postponing its tick.
     @State private var pointerClock = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
@@ -66,6 +67,7 @@ struct WiiShell: View {
                 activate(route, initial: true)
                 if route == .home { WiiAudio.shared.startMusic() }
             }
+            .sheet(isPresented: $showingSensorEvidence) { SensorEvidenceView(motion: motion) }
     }
 
     private func feedPointer() {
@@ -160,6 +162,10 @@ struct WiiShell: View {
                 MotionButton("Back to menu") { open(.home) }
                     .buttonStyle(WiiButtonStyle())
                     .keyboardShortcut(.escape, modifiers: [])
+            } else {
+                MotionButton { showingSensorEvidence = true } label: {
+                    Label("How it works", systemImage: "waveform.path")
+                }.buttonStyle(WiiButtonStyle())
             }
 
             Text(statusText)

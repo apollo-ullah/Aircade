@@ -22,7 +22,7 @@ struct BadgeRun: Codable, Equatable {
     var isDemo: Bool
     var gameVersion: String
 }
-struct StationConfiguration: Codable {
+struct StationConfiguration: Codable, Sendable {
     let url: String
     let token: String
 }
@@ -49,11 +49,56 @@ final class PlayerSession: ObservableObject {
     private let transport: Transport
     private let uploadOnFinish: Bool
     private var profileRevision = 0
-    private var configuration: StationConfiguration? { configurationProvider() }
+    // SwiftUI reads this memory snapshot. File access must never happen while
+    // evaluating profilesAvailable or a view's leaderboard link.
+    @Published private var configuration: StationConfiguration?
+
+    static func configurationURL(environment: [String: String] = ProcessInfo.processInfo.environment,
+                                 bundleURL: URL = Bundle.main.bundleURL,
+                                 supportDirectory: URL? = nil) -> URL {
+        if let path = environment["AIRCADE_STATION_CONFIG"] { return URL(fileURLWithPath: path) }
+        let root = bundleURL.deletingLastPathComponent().deletingLastPathComponent().standardizedFileURL
+        let identifier = SHA256.hash(data: Data(root.path.utf8)).map { String(format: "%02x", $0) }.joined().prefix(16)
+        let support = supportDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let staged = support.appendingPathComponent("Aircade/Stations/\(identifier).json")
+        // This resolver is called by the background reader, never by view getters.
+        return FileManager.default.fileExists(atPath: staged.path) ? staged : root.appendingPathComponent(".local/station.json")
+    }
+
     static func loadConfiguration() -> StationConfiguration? {
-        let path = ProcessInfo.processInfo.environment["AIRCADE_STATION_CONFIG"]
-        let url = path.map { URL(fileURLWithPath: $0) } ?? Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(".local/station.json")
-        return (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode(StationConfiguration.self, from: $0) }
+        (try? Data(contentsOf: configurationURL())).flatMap { try? JSONDecoder().decode(StationConfiguration.self, from: $0) }
+    }
+
+    // The lock protects the only mutable field across completion and timeout.
+    private final class ConfigurationRead: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<StationConfiguration?, Never>?
+        init(_ continuation: CheckedContinuation<StationConfiguration?, Never>) { self.continuation = continuation }
+        func finish(_ value: StationConfiguration?) {
+            lock.lock()
+            let callback = continuation
+            continuation = nil
+            lock.unlock()
+            callback?.resume(returning: value)
+        }
+    }
+
+    /// A filesystem permission dialog can stall open(). Race that background
+    /// operation against a bounded response without waiting for the blocked read.
+    static func loadConfigurationAsync(provider: @escaping () -> StationConfiguration? = PlayerSession.loadConfiguration,
+                                       timeout: TimeInterval = 2) async -> StationConfiguration? {
+        await withCheckedContinuation { continuation in
+            let read = ConfigurationRead(continuation)
+            DispatchQueue.global(qos: .utility).async { read.finish(provider()) }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { read.finish(nil) }
+        }
+    }
+
+    @MainActor
+    private func refreshConfiguration() async -> StationConfiguration? {
+        let loaded = await Self.loadConfigurationAsync(provider: configurationProvider)
+        configuration = loaded
+        return loaded
     }
     var leaderboardURL: URL { URL(string: configuration?.url ?? "") ?? URL(string: "http://127.0.0.1:8787")! }
     func leaderboardURL(for mode: String) -> URL {
@@ -65,9 +110,12 @@ final class PlayerSession: ObservableObject {
     var profilesAvailable: Bool { configuration != nil }
 
     init(queueDirectory: URL? = nil, automaticRetry: Bool = true, uploadOnFinish: Bool = true,
-         configurationProvider: @escaping () -> StationConfiguration? = PlayerSession.loadConfiguration,
+         configurationProvider: (() -> StationConfiguration?)? = nil,
          transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
-        self.configurationProvider = configurationProvider
+        self.configurationProvider = configurationProvider ?? PlayerSession.loadConfiguration
+        // Injected providers are in-memory fixtures; preserve their immediate
+        // availability without making production disk reads synchronous.
+        self.configuration = configurationProvider?()
         self.transport = transport
         self.uploadOnFinish = uploadOnFinish
         let directory = queueDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Aircade", isDirectory: true)
@@ -76,6 +124,9 @@ final class PlayerSession: ObservableObject {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             if FileManager.default.fileExists(atPath: queueURL.path) { pending = try JSONDecoder().decode([BadgeRun].self, from: Data(contentsOf: queueURL)) }
         } catch { saveStatus = "Could not read saved upload queue: \(error.localizedDescription)" }
+        if configurationProvider == nil {
+            Task { @MainActor [weak self] in _ = await self?.refreshConfiguration() }
+        }
         if automaticRetry {
             retryTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.flush() }
             flush()
@@ -252,7 +303,6 @@ final class PlayerSession: ObservableObject {
     }
     func refreshLeaderboard(_ mode: String = "Arcade") {
         guard ["Arcade", "Chill", "Tennis"].contains(mode) else { return }
-        guard profilesAvailable else { leaderboardStatus[mode] = "Badge station is offline. Guest play is available."; return }
         let requestID = UUID(); boardRequests[mode] = requestID
         let profileID = player?.id, revision = profileRevision
         if leaderboards[mode] == nil { leaderboardStatus[mode] = "Loading leaderboard…" }
@@ -276,7 +326,7 @@ final class PlayerSession: ObservableObject {
     }
 
     private func request(_ path: String, method: String, body: [String: Any], query: [String: String] = [:]) async throws -> Data {
-        guard let config = configuration, let base = URL(string: config.url), let scheme = base.scheme,
+        guard let config = await refreshConfiguration(), let base = URL(string: config.url), let scheme = base.scheme,
               scheme == "https" || (scheme == "http" && ["127.0.0.1", "localhost"].contains(base.host ?? "")) else {
             throw NSError(domain: "Aircade", code: 1, userInfo: [NSLocalizedDescriptionKey: "Start the local server first (scripts/start-station.sh)."])
         }

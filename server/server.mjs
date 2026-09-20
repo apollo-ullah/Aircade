@@ -1,8 +1,10 @@
 import express from 'express';
-import { gatewayKey, evaluateJevShot } from '../tools/astra-arena/jev.mjs';
+import { TacticalPlanner } from './providers/planner.mjs';
+import { publicFailure, normalizeFailure, contractVersion } from './providers/contract.mjs';
+import { loadStationConfig } from './station-config.mjs';
 import { MongoClient } from 'mongodb';
-import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -10,16 +12,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 let localOpponentModel = { modelVersion: 'synthetic-logreg-v1', bias: 2.45, weights: { distance: -1.35, reactionTime: 1.2, pace: -1.05, targetsWeakSide: -0.55, rallyLength: -0.025 } };
 try { localOpponentModel = JSON.parse(readFileSync(path.join(root, '..', 'baseten', 'tennis-opponent', 'model', 'weights.json'))); }
 catch { /* The bundled coefficients remain a safe fallback for partial deployments. */ }
-const local = path.join(root, '..', '.local');
-mkdirSync(local, { recursive: true, mode: 0o700 });
-const configPath = path.join(local, 'station.json');
-let config;
-try { config = JSON.parse(readFileSync(configPath)); }
-catch (error) {
-  if (error.code !== 'ENOENT') throw error;
-  config = { url: 'http://127.0.0.1:8787', token: randomBytes(32).toString('hex'), stationID: randomUUID(), badgeSecret: randomBytes(32).toString('hex') };
-  writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
-}
+const { config, host, port, url: stationURL } = loadStationConfig();
 const mongo = new MongoClient(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017', { serverSelectionTimeoutMS: 5000 });
 await mongo.connect();
 const db = mongo.db(process.env.MONGODB_DB || 'aircade');
@@ -232,21 +225,15 @@ async function fetchBasetenPlan(body) {
     latencyMs: Math.round(performance.now() - started), fallbackUsed: false
   });
 }
-let lastJevRequest = -Infinity;
-async function fetchJevPlan(body) {
-  const key = await gatewayKey();
-  if (!key) throw Error('Jev key missing');
-  if (performance.now() - lastJevRequest < 2200) throw Error('Jev planning cooldown');
-  lastJevRequest = performance.now();
-  const started = performance.now();
-  const selected = await evaluateJevShot(key, body, AbortSignal.timeout(6000));
-  return { provider: 'Vercel Jev', modelVersion: 'typesafe-ai/jev', latencyMs: Math.round(performance.now()-started), fallbackUsed: false,
-    returns: [{ candidateID: selected.id, targetX: selected.targetX, flightDuration: selected.flightDuration, delay: selected.delay, stroke: selected.stroke, returnProbability: 1 }] };
-}
-app.get('/api/health', asyncRoute(async (_, res) => { await db.command({ ping: 1 }); res.json({ ok: true }); }));
+// This cap bounds live station calls until its next explicit restart. Comparison
+// runs have a separate fixed 80-attempt budget and never silently retry failures.
+const configuredLimit = Number(process.env.AIRCADE_TACTICAL_MAX_CALLS || 120);
+const tacticalPlanner = new TacticalPlanner({ maxCalls: Number.isInteger(configuredLimit) && configuredLimit > 0 && configuredLimit <= 1000 ? configuredLimit : 120 });
+app.get('/api/health', asyncRoute(async (_, res) => { await db.command({ ping: 1 }); res.json({ ok: true, contractVersion }); }));
 app.post('/api/tennis/opponent-plan', auth, asyncRoute(async (req, res) => {
   const body = req.body;
-  if (!body || (body.provider != null && !['baseten','jev'].includes(body.provider)) || (body.playerID != null && !validID(body.playerID)) || body.difficulty !== 'rival'
+  if (!body || (body.provider != null && !['baseten','jev','astra'].includes(body.provider)) || (body.playerID != null && !validID(body.playerID)) || body.difficulty !== 'rival'
+      || (body.observationID != null && (typeof body.observationID !== 'string' || !/^[a-zA-Z0-9_.:-]{1,100}$/.test(body.observationID)))
       || !Number.isInteger(body.score) || body.score < 0 || body.score > 1000000
       || !Number.isInteger(body.misses) || body.misses < 0 || body.misses > 1000
       || !Number.isInteger(body.longestRally) || body.longestRally < 0 || body.longestRally > 1000
@@ -258,8 +245,23 @@ app.post('/api/tennis/opponent-plan', auth, asyncRoute(async (req, res) => {
       || new Set(body.candidates.map(value => value.id)).size !== body.candidates.length) {
     return res.status(400).json({ error: 'Invalid tennis opponent request' });
   }
+  if (body.provider === 'astra' || body.provider === 'jev') {
+    const controller = new AbortController();
+    const disconnected = () => { if (!res.writableEnded) controller.abort(); };
+    res.on('close', disconnected);
+    try {
+      const plan = await tacticalPlanner.plan(body, { signal: controller.signal });
+      if (!res.destroyed) res.json(plan);
+    } catch (error) {
+      const failure = normalizeFailure(error);
+      if (!res.destroyed) {
+        if (failure.retryAfterMs != null) res.set('Retry-After', String(Math.ceil(failure.retryAfterMs / 1000)));
+        res.status(failure.status).json(publicFailure(failure, body.provider));
+      }
+    } finally { res.off('close', disconnected); }
+    return;
+  }
   try {
-    if(body.provider === 'jev') return res.json(await fetchJevPlan(body));
     const llm = await fetchBasetenLLMPlan(body);
     if (llm) {
       const incoming = finite(body.incomingBallX) ? body.incomingBallX.toFixed(2) : 'serve';
@@ -371,6 +373,5 @@ app.get('/api/leaderboard', asyncRoute(async (req, res) => {
 }));
 app.use(express.static(path.join(root, 'public')));
 app.use((err, req, res, next) => { res.status(err.status === 400 ? 400 : 500).json({ error: err.status === 400 ? 'Invalid request' : 'Database request failed; try again' }); });
-const port = Number(process.env.PORT || 8787), host = process.env.HOST || '127.0.0.1';
-const server = app.listen(port, host, () => console.log(`Aircade API and leaderboard: http://${host}:${port}`));
+const server = app.listen(port, host, () => console.log(`Aircade API and leaderboard: ${stationURL}`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(async () => { await mongo.close(); process.exit(0); }));

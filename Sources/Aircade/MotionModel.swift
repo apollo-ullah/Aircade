@@ -61,6 +61,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     @Published var logPath = ""
     @Published var logError = ""
     @Published var events: [String] = []
+    lazy var sensorEvidence = SensorEvidenceStore(directory: logDirectory)
 
     @Published var useCamera = false {
         didSet {
@@ -199,6 +200,22 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         }
     }
 
+    /// Immutable presentation data; the evidence view never owns or restarts tracking.
+    var sensorEvidenceSnapshot: SensorEvidenceFrame {
+        SensorEvidenceFrame(capturedAt: now, receivedAt: lastReceived, sensorTime: lastSensorTime,
+            source: source, reportedSource: incomingSource, simulated: simulated,
+            fresh: hasFreshMotion, calibrated: calibrated && calibrationStep == 0,
+            quaternion: rawOrientation?.vector, reference: tracker.reference?.vector,
+            basis: basis.vector, racket: saber.vector, eulerDegrees: attitude,
+            angularVelocity: rotation, userAcceleration: acceleration, frequency: frequency,
+            smoothingSeconds: smoothing,
+            calibrationMode: useSimpleCalibration ? "Three captured poses" : "Steady five-step setup",
+            grip: grip == 4 ? "Measured grip axes" : "Axis preset \(grip)", cameraEnabled: useCamera)
+    }
+
+    func beginSensorEvidenceRecording() { sensorEvidence.begin(with: sensorEvidenceSnapshot) }
+    func cancelSensorEvidenceRecording() { sensorEvidence.cancel() }
+
     func start(demo: Bool = false) {
         if demo { controllers.selectSolo(.airPod) }
         stop()
@@ -292,6 +309,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     }
 
     func stop() {
+        sensorEvidence.interrupted("tracking stopped.")
         motionInbox.stop()
         manager?.stopDeviceMotionUpdates()
         manager?.stopConnectionStatusUpdates()
@@ -513,6 +531,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
                   String(attitude.x), String(attitude.y), String(attitude.z),
                   String(rate.x), String(rate.y), String(rate.z), String(accel.x), String(accel.y), String(accel.z),
                   String(calibrated), String(swings), ""])
+        sensorEvidence.accept(sensorEvidenceSnapshot)
     }
 
     private func refreshPermissions() {
@@ -556,6 +575,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
             }
             if sampleAge > 0.5 && testing { testProgress = 0 }
         }
+        sensorEvidence.publish(sensorEvidenceSnapshot)
         if now - lastHealthWrite > 1 {
             lastHealthWrite = now
             let health: [String: Any] = ["running": running, "simulated": simulated,
@@ -610,6 +630,7 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
     }
 
     private func event(_ message: String) {
+        sensorEvidence.event(message, at: now)
         let stamp = Date().formatted(date: .omitted, time: .standard)
         events.insert("\(stamp)  \(message)", at: 0)
         if events.count > 10 { events.removeLast() }
@@ -847,8 +868,12 @@ final class MotionModel: NSObject, ObservableObject, CMHeadphoneMotionManagerDel
         }
         tennis.onJudgment = { [weak self] event in
             switch event {
-            case .playerReturn: self?.sendSoloFeedback(.hit)
-            case .miss: self?.sendSoloFeedback(.damage)
+            case .playerReturn(let points):
+                self?.sendSoloFeedback(.hit)
+                self?.event("TENNIS PLAYER RETURN +\(points) · \(self?.activeControllerName ?? "controller")")
+            case .miss:
+                self?.sendSoloFeedback(.damage)
+                self?.event("TENNIS MISS · \(self?.activeControllerName ?? "controller")")
             default: break
             }
         }

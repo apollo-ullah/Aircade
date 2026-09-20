@@ -15,8 +15,13 @@ final class TennisGame: ObservableObject {
     @Published private(set) var tacticalProvider = "baseten"
     private(set) var playerCourtX: Float = 0
     var opponentReady: Bool { codexPractice || modelOpponent == nil || modelOpponent?.hasModelPlan == true }
-    func prepareOpponent() { modelOpponent?.refresh(playerID: activePlayerID?(), match: state) }
+    func prepareOpponent() {
+        guard !codexPractice, !opponentInspectorOpen, state.phase != .paused else { return }
+        if state.phase == .menu || state.phase == .results { modelOpponent?.resume() }
+        modelOpponent?.refresh(playerID: activePlayerID?(), match: state)
+    }
     func selectTacticalOpponent(_ provider: String) {
+        guard ["baseten", "jev", "astra"].contains(provider) else { return }
         leave(); codexPractice = false; tacticalProvider = provider
         modelOpponent?.select(provider: provider)
         opponentStatus = TennisOpponentStatus(provider: provider, modelVersion: "connecting", decision: "Preparing model shot")
@@ -65,6 +70,7 @@ final class TennisGame: ObservableObject {
     private var lastInput = 0.0
     private var feedbackUntil = 0.0
     private var resultSaved = false
+    private var opponentInspectorOpen = false
     private var recoveryStartedAt = 0.0
     @Published private(set) var manualOpponentEnabled = false
     @Published private(set) var manualOpponentX: Float = 0
@@ -90,13 +96,14 @@ final class TennisGame: ObservableObject {
     var liveReady: Bool { inputReady && now - lastInput < ArcadeGame.freshInputAge }
 
     func start(demo: Bool = false) {
-        guard enabled else { return }
+        guard enabled, !opponentInspectorOpen else { return }
         if let authorizeRun, !authorizeRun() { return }
         guard liveReady else { return }
         guard demo || opponentReady else { prepareOpponent(); return }
         if !resultSaved { onRunAbandoned?(runID) }
         runID = onRunStarted?(demo || codexPractice)
         isDemo = demo || codexPractice
+        if !codexPractice { modelOpponent?.beginRun() }
         state.start()
         state.assistedOpponent = codexPractice
         resultSaved = false
@@ -116,6 +123,7 @@ final class TennisGame: ObservableObject {
     }
 
     func pause(_ reason: String = "Take a breath.") {
+        modelOpponent?.suspend()
         guard state.phase == .playing || state.phase == .countdown else { return }
         pauseReason = reason
         state.pause()
@@ -126,7 +134,7 @@ final class TennisGame: ObservableObject {
     }
 
     func resume() {
-        guard state.phase == .paused, liveReady else { return }
+        guard state.phase == .paused, liveReady, !opponentInspectorOpen else { return }
         state.resume()
         lastTick = now
         recoveringInput = false
@@ -134,9 +142,26 @@ final class TennisGame: ObservableObject {
         previousBall = nil
         previousTime = nil
         onRunResumed?(runID)
+        if !codexPractice {
+            modelOpponent?.resume()
+            prepareOpponent()
+        }
+    }
+
+    func suspendOpponentForInspector() {
+        opponentInspectorOpen = true
+        pause("Sensor explanation is open. Check your controller, then resume.")
+    }
+
+    func dismissOpponentInspector() {
+        opponentInspectorOpen = false
+        // Active matches remain explicitly paused; lobby/results can prepare
+        // their next decision without advancing physics or changing the run.
+        if state.phase == .menu || state.phase == .results { prepareOpponent() }
     }
 
     func leave() {
+        modelOpponent?.endRun()
         if !resultSaved, runID != nil { onRunAbandoned?(runID) }
         runID = nil
         state.quit()
@@ -160,7 +185,10 @@ final class TennisGame: ObservableObject {
         previousBall = nil
         previousTime = nil
         recoveringInput = false
-        pause(reason)
+        // Model preparation is independent of controller readiness in the lobby
+        // and results. Only a running match needs its model work suspended for
+        // tracking loss; explicit pause/inspector/end-run still cancel any phase.
+        if state.phase == .playing || state.phase == .countdown { pause(reason) }
     }
 
     func waitForFreshInput() {
@@ -275,6 +303,7 @@ final class TennisGame: ObservableObject {
         case .opponentPreparing(let contactX, let stroke, let delay):
             if !manualOpponentEnabled { scene.prepareTennisOpponent(contactX: contactX, stroke: stroke, delay: delay) }
         case .opponentReturn(let contactX, let stroke):
+            if !codexPractice { modelOpponent?.markReturnApplied() }
             feedbackGood = true
             feedbackPoints = 0
             feedback = state.rally == 0 ? "SERVE" : "RETURNING"
@@ -307,6 +336,7 @@ final class TennisGame: ObservableObject {
     private func finish() {
         guard !resultSaved else { return }
         resultSaved = true
+        modelOpponent?.suspend()
         let eligible = onRunFinished?(state, isDemo, runID) ?? !isDemo
         if eligible && !isDemo && state.score > bestScore {
             bestScore = state.score

@@ -4,15 +4,17 @@ import SceneKit
 
 @main
 struct AircadeApp: App {
-    @StateObject private var motion = MotionModel()
+    @StateObject private var motion = JudgingPreview.makeMotionForLaunch()
     var body: some Scene {
         WindowGroup("Aircade Sports") {
             ContentView(motion: motion)
                 .frame(minWidth: 1120, minHeight: 760)
                 .preferredColorScheme(.light)
+                .overlay(alignment: .top) { if JudgingPreview.requested { JudgingPreview.banner } }
                 .onAppear {
                     NSApp.setActivationPolicy(.regular)
                     NSApp.activate(ignoringOtherApps: true)
+                    if JudgingPreview.requested { JudgingPreview.run(motion); return }
                     motion.startControllerSession()
                     if CommandLine.arguments.count == 1 && ProcessInfo.processInfo.environment["AIRCADE_LOG_DIRECTORY"] == nil {
                         motion.reconnectSavedAirPodForMenus()
@@ -112,8 +114,11 @@ struct AircadeApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
                     if !CommandLine.arguments.contains("--game-smoke-test") && !CommandLine.arguments.contains("--scripted-repro") && !CommandLine.arguments.contains("--scripted-game-test") && !CommandLine.arguments.contains("--duel-smoke") && !CommandLine.arguments.contains("--tennis-smoke") && !CommandLine.arguments.contains("--shell-smoke") {
                         motion.game.pause("Paused while Aircade was in the background.")
-                        // Tennis may be controlled through the live game window by
-                        // Codex computer use, so a focus handoff must not pause it.
+                        // Tactical matches pause while judges inspect the recorded
+                        // report. Computer use retains its explicit focus handoff.
+                        if !motion.tennis.codexPractice && (motion.tennis.state.phase == .playing || motion.tennis.state.phase == .countdown) {
+                            motion.tennis.pause("Paused while Aircade was in the background.")
+                        }
                         if motion.showingMultiplayer { motion.multiplayer.pause("Paused while Aircade was in the background.") }
                     }
                 }

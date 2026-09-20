@@ -18,9 +18,12 @@ async function availablePort() {
 
 test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards', async () => {
   const database = `aircade_test_${randomUUID().replaceAll('-', '')}`;
+  const temporary = mkdtempSync(path.join(tmpdir(), 'aircade-station-test-'));
+  const configPath = path.join(temporary, 'station.json');
+  const stationPort = await availablePort();
   const child = spawn(process.execPath, ['server.mjs'], {
     cwd: import.meta.dirname,
-    env: { ...process.env, PORT: '8788', MONGODB_DB: database, BASETEN_TENNIS_LLM_URL: '', BASETEN_TENNIS_URL: '', BASETEN_API_KEY: '' },
+    env: { ...process.env, PORT: String(stationPort), AIRCADE_STATION_CONFIG: configPath, MONGODB_DB: database, BASETEN_TENNIS_LLM_URL: '', BASETEN_TENNIS_URL: '', BASETEN_API_KEY: '', OPENAI_API_KEY: '', AI_GATEWAY_API_KEY: '' },
     stdio: 'pipe'
   });
   let output = ''; child.stdout.on('data', d => output += d); child.stderr.on('data', d => output += d);
@@ -29,13 +32,13 @@ test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards'
     let ready = false;
     for (let i = 0; i < 100; i++) {
       if (child.exitCode !== null) throw new Error(output);
-      try { if ((await fetch('http://127.0.0.1:8788/api/health')).ok) { ready = true; break; } } catch {}
+      try { if ((await fetch(`http://127.0.0.1:${stationPort}/api/health`)).ok) { ready = true; break; } } catch {}
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     assert.ok(ready, output);
-    const config = JSON.parse(readFileSync(new URL('../.local/station.json', import.meta.url)));
+    const config = JSON.parse(readFileSync(configPath));
     async function request(route, method = 'GET', body, authenticated = true) {
-      const r = await fetch(`http://127.0.0.1:8788${route}`, { method, headers: { 'Content-Type': 'application/json', ...(authenticated ? { Authorization: `Bearer ${config.token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+      const r = await fetch(`http://127.0.0.1:${stationPort}${route}`, { method, headers: { 'Content-Type': 'application/json', ...(authenticated ? { Authorization: `Bearer ${config.token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
       return { status: r.status, body: await r.json() };
     }
     const digest = createHash('sha256').update('test-badge-only-not-a-real-attendee').digest('hex');
@@ -118,7 +121,7 @@ test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards'
       const temporary = mkdtempSync(path.join(tmpdir(), 'aircade-client-check-'));
       try {
         const configFile = path.join(temporary, 'station.json');
-        writeFileSync(configFile, JSON.stringify({ ...config, url: 'http://127.0.0.1:8788' }), { mode: 0o600 });
+        writeFileSync(configFile, JSON.stringify({ ...config, url: `http://127.0.0.1:${stationPort}` }), { mode: 0o600 });
         const native = spawn(process.env.AIRCADE_NATIVE_CHECK, [], { env: { ...process.env, AIRCADE_STATION_CONFIG: configFile, AIRCADE_CHECK_DIRECTORY: temporary }, stdio: 'pipe' });
         let details = ''; native.stdout.on('data', d => details += d); native.stderr.on('data', d => details += d);
         const result = await new Promise((resolve, reject) => { native.on('error', reject); native.on('exit', resolve); });
@@ -130,11 +133,14 @@ test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards'
     child.kill('SIGTERM');
     await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));
     await mongo.connect(); await mongo.db(database).dropDatabase(); await mongo.close();
+    rmSync(temporary, { recursive: true, force: true });
   }
 });
 
 test('Baseten LLM ranks only legal returns and reports remote inference', async () => {
   const stationPort = await availablePort();
+  const temporary = mkdtempSync(path.join(tmpdir(), 'aircade-station-llm-test-'));
+  const configPath = path.join(temporary, 'station.json');
   let received;
   const mock = createServer(async (req, res) => {
     const chunks = [];
@@ -152,7 +158,7 @@ test('Baseten LLM ranks only legal returns and reports remote inference', async 
   const child = spawn(process.execPath, ['server.mjs'], {
     cwd: import.meta.dirname,
     env: {
-      ...process.env, PORT: String(stationPort), MONGODB_DB: database,
+      ...process.env, PORT: String(stationPort), AIRCADE_STATION_CONFIG: configPath, MONGODB_DB: database, OPENAI_API_KEY: '', AI_GATEWAY_API_KEY: '',
       BASETEN_TENNIS_LLM_URL: `http://127.0.0.1:${modelPort}/v1`,
       BASETEN_TENNIS_LLM_MODEL: 'qwen-3-4b-test', BASETEN_API_KEY: 'test-key', BASETEN_TENNIS_URL: ''
     },
@@ -168,7 +174,7 @@ test('Baseten LLM ranks only legal returns and reports remote inference', async 
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     assert.ok(ready, output);
-    const config = JSON.parse(readFileSync(new URL('../.local/station.json', import.meta.url)));
+    const config = JSON.parse(readFileSync(configPath));
     const candidates = [
       { id: 'deep-left', targetX: -3.1, flightDuration: 2.72, delay: 0.34, stroke: 'forehand', distance: 3.1, reactionTime: 2.72, pace: 0.37, targetsWeakSide: true, rallyLength: 4 },
       { id: 'left', targetX: -1.55, flightDuration: 2.88, delay: 0.38, stroke: 'backhand', distance: 1.55, reactionTime: 2.88, pace: 0.35, targetsWeakSide: true, rallyLength: 4 },
@@ -199,5 +205,6 @@ test('Baseten LLM ranks only legal returns and reports remote inference', async 
     await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));
     await mongo.connect(); await mongo.db(database).dropDatabase(); await mongo.close();
     await new Promise(resolve => mock.close(resolve));
+    rmSync(temporary, { recursive: true, force: true });
   }
 });

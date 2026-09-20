@@ -7,6 +7,16 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Music"
 cp .build/release/Aircade "$APP/Contents/MacOS/Aircade"
 cp "audio-library/music/Local Forecast.mp3" "$APP/Contents/Resources/Music/Local Forecast.mp3"
 cp audio-library/CREDITS.md "$APP/Contents/Resources/AudioCredits.md"
+if [[ -f docs/evidence/DecisionComparison.html ]]; then
+  cp docs/evidence/DecisionComparison.html "$APP/Contents/Resources/DecisionComparison.html"
+  cp docs/evidence/DecisionComparison.json "$APP/Contents/Resources/DecisionComparison.json"
+fi
+if [[ -f docs/evidence/CodexDevelopmentStory.html ]]; then
+  cp docs/evidence/CodexDevelopmentStory.html "$APP/Contents/Resources/CodexDevelopmentStory.html"
+fi
+if [[ -f Resources/Judging/SensorExample.json ]]; then
+  cp Resources/Judging/SensorExample.json "$APP/Contents/Resources/SensorExample.json"
+fi
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -1,5 +1,6 @@
 import XCTest
 import MotionCore
+import CryptoKit
 @testable import Aircade
 
 final class PlayerSessionTests: XCTestCase {
@@ -19,6 +20,54 @@ final class PlayerSessionTests: XCTestCase {
                          transport: @escaping PlayerSession.Transport = { _ in throw URLError(.notConnectedToInternet) }) -> PlayerSession {
         PlayerSession(queueDirectory: directory, automaticRetry: false, uploadOnFinish: false,
                       configurationProvider: { configuration }, transport: transport)
+    }
+
+    func testViewConfigurationGettersNeverReloadTheProvider() {
+        var reads = 0
+        let config = StationConfiguration(url: "http://127.0.0.1:8794", token: "test-only-token")
+        let players = PlayerSession(queueDirectory: directory, automaticRetry: false,
+                                    configurationProvider: { reads += 1; return config })
+        XCTAssertEqual(reads, 1)
+        for _ in 0..<100 {
+            XCTAssertTrue(players.profilesAvailable)
+            XCTAssertEqual(players.leaderboardURL(for: "Tennis").port, 8794)
+        }
+        XCTAssertEqual(reads, 1, "SwiftUI can evaluate repeatedly without touching the configuration file")
+    }
+
+    @MainActor
+    func testBlockedConfigurationReadTimesOutWithoutBlockingMainActor() async {
+        let release = DispatchSemaphore(value: 0)
+        let finished = expectation(description: "Background reader released")
+        var mainActorRan = false
+        Task { @MainActor in mainActorRan = true }
+        let loaded = await PlayerSession.loadConfigurationAsync(provider: {
+            XCTAssertFalse(Thread.isMainThread)
+            release.wait()
+            finished.fulfill()
+            return StationConfiguration(url: "http://127.0.0.1:8794", token: "fixture")
+        }, timeout: 0.03)
+        XCTAssertNil(loaded, "A permission-blocked file must not keep a request waiting indefinitely")
+        XCTAssertTrue(mainActorRan, "The UI executor stays available while disk access is blocked")
+        release.signal()
+        await fulfillment(of: [finished], timeout: 1)
+    }
+
+    func testStationResolverUsesScopedStagingAndExplicitOverride() throws {
+        let bundle = directory.appendingPathComponent("checkout/build/Aircade.app")
+        let support = directory.appendingPathComponent("support")
+        let legacy = directory.appendingPathComponent("checkout/.local/station.json")
+        XCTAssertEqual(PlayerSession.configurationURL(environment: [:], bundleURL: bundle, supportDirectory: support), legacy)
+        let stagedDirectory = support.appendingPathComponent("Aircade/Stations")
+        try FileManager.default.createDirectory(at: stagedDirectory, withIntermediateDirectories: true)
+        // The test obtains the expected hash independently through CryptoKit.
+        let root = bundle.deletingLastPathComponent().deletingLastPathComponent().standardizedFileURL.path
+        let digest = SHA256.hash(data: Data(root.utf8)).map { String(format: "%02x", $0) }.joined().prefix(16)
+        let staged = stagedDirectory.appendingPathComponent("\(digest).json")
+        try Data("{}".utf8).write(to: staged)
+        XCTAssertEqual(PlayerSession.configurationURL(environment: [:], bundleURL: bundle, supportDirectory: support), staged)
+        let explicit = directory.appendingPathComponent("explicit.json")
+        XCTAssertEqual(PlayerSession.configurationURL(environment: ["AIRCADE_STATION_CONFIG": explicit.path], bundleURL: bundle, supportDirectory: support), explicit)
     }
 
     private func rushResult() -> NeonRush {

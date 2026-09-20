@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Aircade · A verified Codex development story</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#183045;background:#f1f6f8;font-synthesis:none;--muted:#536774;--teal:#247d91;--line:#d9e4e8;--green:#217659}
+    *{box-sizing:border-box}body{margin:0}main{max-width:1140px;margin:auto;padding:28px 28px 22px}a{color:var(--teal)}.topline{display:flex;justify-content:space-between;align-items:center;gap:14px;font-size:12px;font-weight:750;letter-spacing:.1em}.brand{display:flex;align-items:center;gap:9px}.brand svg{width:25px;height:25px}.badge{font-size:10px;letter-spacing:.08em;background:#dcebef;color:#28677c;padding:7px 11px;border-radius:20px;white-space:nowrap}h1{font-size:clamp(29px,3.7vw,42px);letter-spacing:-.045em;line-height:1.1;margin:20px 0 10px;font-weight:760}header>p{font-size:16px;color:var(--muted);line-height:1.5;margin:0;max-width:950px}.story{display:grid;grid-template-columns:1fr 1.13fr 1fr;gap:16px;margin-top:23px}.card{border:1px solid var(--line);border-radius:17px;background:#fff;padding:20px 21px}.label{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.1em;font-weight:750;color:var(--teal);margin:0}.step{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;background:#e8f0f3;font-size:10px;letter-spacing:0}.card h2{font-size:22px;letter-spacing:-.03em;margin:15px 0 9px;line-height:1.17}.card p:not(.label){font-size:13px;line-height:1.5;margin:10px 0 0;color:var(--muted)}.stat{font-size:48px;line-height:1;letter-spacing:-.05em;font-weight:770;margin:15px 0 5px}.stat span{font-size:25px;font-weight:450;color:#718b97}.stat-caption{font-size:13px;font-weight:650;color:#304c5d}.observed .stat{color:#a44a2e}.verified .stat{color:var(--green)}.fix{background:#faffff;border-color:#bddce2}.fix h2{margin-bottom:14px}.steps{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:8px 0 0;font-size:11px;font-weight:650;color:#28677c}.steps span{padding:6px 8px;background:#e8f3f4;border-radius:6px}.steps b{font-weight:450;color:#648998}.verification{display:flex;align-items:center;gap:7px;margin-top:14px;font-size:12px;font-weight:650;color:var(--green)}.verification svg{width:16px;height:16px;flex-shrink:0}.result{display:grid;grid-template-columns:1.1fr 1fr 1fr;align-items:center;gap:24px;border:1px solid #c8dedf;border-radius:17px;background:#e7f1f2;margin-top:16px;padding:19px 22px}.result h2{font-size:19px;letter-spacing:-.025em;margin:6px 0 5px}.result p{font-size:12px;line-height:1.5;color:var(--muted);margin:0}.result .eyebrow{font-size:10px;letter-spacing:.1em;font-weight:750;color:var(--teal)}.result .metric{border-left:1px solid #c9dfe1;padding-left:24px}.provider{font-size:12px;font-weight:700;margin-bottom:4px}.score{font-size:28px;line-height:1.05;font-weight:750;letter-spacing:-.03em}.score span{font-size:13px;color:var(--muted);font-weight:500;letter-spacing:0}.latency{font-size:12px;color:var(--muted);margin-top:7px}.latency strong{color:#254c5a;font-weight:700}.bottom{margin-top:15px;display:flex;align-items:center;gap:22px;justify-content:space-between}.caveat{font-size:12px;line-height:1.45;color:var(--muted);max-width:650px;margin:0}.button{font-size:12px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 14px;background:#fff;border:1px solid #b8ccd4;border-radius:9px;font-weight:700;white-space:nowrap;text-decoration:none;color:#225d6e}.button:hover{background:#e4f0f2}.button svg{width:15px;height:15px}a:focus-visible,summary:focus-visible{outline:3px solid #65b8c9;outline-offset:4px}details{margin-top:17px;border-top:1px solid var(--line);padding-top:12px}summary{font-size:12px;color:#28677c;font-weight:650;cursor:pointer;width:fit-content}details .technical{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:14px;background:white;border:1px solid var(--line);border-radius:12px;padding:18px 20px;font-size:12px;line-height:1.55;color:var(--muted)}.technical h3{font-size:13px;color:#183045;margin:0 0 7px}.technical p{margin:7px 0}.technical code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;overflow-wrap:anywhere;background:#f1f6f8;padding:1px 4px;border-radius:4px}.technical ol{padding-left:18px;margin:6px 0}.technical li{margin:6px 0}footer{margin-top:13px;font-size:10px;line-height:1.5;color:#738793;display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap}.technical .note{font-size:11px;color:#617686}
+    @media(max-width:780px){main{padding:22px 19px}.story{gap:10px}.card{padding:16px 14px}.card p:not(.label){font-size:12px}.label{font-size:10px;letter-spacing:.06em}.result{gap:14px;padding:17px}.result .metric{padding-left:14px}.bottom{gap:16px}.stat{font-size:42px}.steps{font-size:10px}.steps span{padding:5px 6px}}
+    @media(max-width:610px){.topline{font-size:11px}.badge{font-size:9px}.story{grid-template-columns:1fr}.card{padding:18px 20px}.card p:not(.label){font-size:13px}.card .stat{margin-top:11px}.result{grid-template-columns:1fr 1fr;gap:18px}.result .intro{grid-column:1/-1}.result .metric{padding-left:0;border-left:0}.bottom{align-items:stretch;flex-direction:column;gap:12px}.button{align-self:flex-start}details .technical{grid-template-columns:1fr;gap:12px}.card h2{font-size:23px}.steps{font-size:12px}.label{font-size:11px}}
+    @media print{main{padding:0;max-width:none}.card,.result{break-inside:avoid}.button,details{display:none}body{background:white}footer{margin-top:20px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="topline">
+      <div class="brand"><svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><circle cx="14" cy="14" r="12" stroke="#247d91" stroke-width="2"/><path d="m8 18 6-11 6 11M10 15h8" stroke="#247d91" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>AIRCADE <span style="color:#93a9b3;font-weight:400">/</span> BUILDING WITH CODEX</div>
+      <span class="badge">VERIFIED DEVELOPMENT STORY</span>
+    </div>
+    <h1>The benchmark caught our own scheduler.</h1>
+    <p>Seven “rate limits” took a reported 0 ms. Codex traced them to our request timing, then helped us correct the comparison.</p>
+  </header>
+
+  <section class="story" aria-label="Observed failure, Codex contribution, and verification">
+    <article class="card observed">
+      <p class="label"><span class="step">01</span> THE EVIDENCE</p>
+      <div class="stat">7<span> / 80</span></div>
+      <div class="stat-caption">planned attempts rejected locally</div>
+      <p>The first report labelled these instant failures as rate limits. They never became API requests.</p>
+      <p>The original run is preserved as superseded diagnostic evidence.</p>
+    </article>
+    <article class="card fix">
+      <p class="label"><span class="step">02</span> CODEX’S CONTRIBUTION</p>
+      <h2>Check the actual clock.<br>Then send the request.</h2>
+      <div class="steps" aria-label="Use monotonic time, round waits up, then recheck eligibility"><span>Monotonic time</span><b>→</b><span>Round up</span><b>→</b><span>Recheck</span></div>
+      <p>Codex fixed fractional waits and early timer wakes, and recorded whether transport actually started.</p>
+      <p>Local admission failures and external HTTP 429s now remain distinguishable.</p>
+    </article>
+    <article class="card verified">
+      <p class="label"><span class="step">03</span> VERIFIED CORRECTION</p>
+      <div class="stat">25<span> / 25</span></div>
+      <div class="stat-caption">Node tests passed</div>
+      <p>Regressions deliberately wake timers early and offset request starts by fractions of a millisecond.</p>
+      <div class="verification"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.7"/><path d="m6 10 2.5 2.5L14 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Spacing and submission counts verified</div>
+    </article>
+  </section>
+
+  <section class="result" aria-label="Corrected complete live API rerun">
+    <div class="intro"><p class="eyebrow">A NEW, COMPLETE LIVE RUN</p><h2>80 real requests. 80 valid decisions.</h2><p>20 fixed states × 2 repeats per provider.<br>Same five shots. Same six-second deadline.</p></div>
+    <div class="metric"><div class="provider">Astra · OpenAI API</div><div class="score">40 / 40 <span>within deadline</span></div><div class="latency">Median <strong>1,836.5 ms</strong> · n = 40</div></div>
+    <div class="metric"><div class="provider">Jev · Vercel AI Gateway</div><div class="score">40 / 40 <span>within deadline</span></div><div class="latency">Median <strong>322 ms</strong> · n = 40</div></div>
+  </section>
+
+  <div class="bottom">
+    <p class="caveat">These results measure valid tactical decisions and request latency. Aircade supplies movement and contact; the comparison does not measure tennis skill or establish why the providers differ.</p>
+    <a class="button" href="DecisionComparison.html">View all 80 attempts <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+  </div>
+
+  <details>
+    <summary>Technical evidence &amp; exact verification</summary>
+    <div class="technical">
+      <section>
+        <h3>What failed, and what Codex changed</h3>
+        <p>The runner scheduled from a timestamp taken before the planner’s actual start. A fractional wait or early timer wake could leave the minimum interval unfinished. The next fixture was consumed by a local cooldown rejection.</p>
+        <ol>
+          <li><code>nextEligibleInMs()</code> reads the planner’s monotonic eligibility clock.</li>
+          <li>The runner rounds waits upward and checks eligibility again after every wake.</li>
+          <li>Adapters mark transport initiation. Local failures do not increase the submitted-request count.</li>
+          <li><code>local_rate_limit</code> is separate from external <code>rate_limit</code> with <code>failureSource: "provider"</code>.</li>
+        </ol>
+        <p>The seven original zero-ms entries were attempts <strong>15, 27, 43, 51, 61, 67, and 71</strong>. The first run also had two timeouts. None of its failed rows were silently replaced.</p>
+        <p class="note">Superseded diagnostic run: <code>6d55d7b6-ef15-4e95-97e0-6ff48e66deeb</code>. Its original submitted-count claim is not used here.</p>
+      </section>
+      <section>
+        <h3>What was actually checked</h3>
+        <p><code>npm test</code>: <strong>25 passed, 0 failed</strong> across provider, comparison, station-config, cold-start and isolated MongoDB integration checks. No real model calls are made by this test suite.</p>
+        <p>The early-wake regression admitted all ten simulated requests with required spacing. Another regression checks local rejection counts against external HTTP 429 responses.</p>
+        <p>The new live run then completed all <strong>40 submitted requests per provider</strong> with no failures. Astra’s observed range was <strong>1,324–4,014 ms</strong>; Jev’s was <strong>236–1,257 ms</strong>.</p>
+        <p><code>gpt-6-astra</code>, low reasoning, strict Responses output; <code>typesafe-ai/jev</code>, typed evaluation. State, candidate order and objective were shared; endpoint serialization differed.</p>
+        <p class="note">Recorded September 20, 2026, 05:25–05:27 EDT. Corrected run: <code>5c52f869-b34d-4d00-a30c-c3241444bc1d</code>.<br>Scheduling: <code>monotonic-admission-v2</code>. <a href="DecisionComparison.json">Open the recorded evidence JSON</a>.</p>
+      </section>
+    </div>
+  </details>
+  <footer><span>Built and verified in this Codex task · Hack the North 2026</span><span>Recorded evidence · Synthetic game states · Physical-controller performance is measured separately</span></footer>
+</main>
+</body>
+</html>

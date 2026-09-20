@@ -9,6 +9,7 @@ struct TennisView: View {
     @State private var restoreCamera = false
     @State private var showingSetup = false
     @State private var showingCodexPrompt = false
+    @State private var showingSensorEvidence = false
     private let courtBlue = GameIdentity.tennis.accent
     private var canStartRally: Bool { game.opponentReady || motion.activeInputSimulated }
 
@@ -22,7 +23,17 @@ struct TennisView: View {
             else {
                 VStack(spacing: 0) {
                     hud
+                    if !game.codexPractice && (game.state.phase == .playing || game.state.phase == .countdown) {
+                        TennisRivalEvidencePanel(status: game.opponentStatus).padding(.horizontal, 24)
+                    }
                     Spacer()
+                    if game.state.phase == .playing && game.state.returns == 0 {
+                        Label("Swing as the ball reaches your racket. Your player runs automatically.", systemImage: "figure.tennis")
+                            .font(WiiTheme.body(13, .semibold)).foregroundStyle(.white)
+                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            .background(.black.opacity(0.65), in: Capsule()).padding(.bottom, 12)
+                            .allowsHitTesting(false)
+                    }
                     if !game.feedback.isEmpty && game.state.phase == .playing {
                         VStack(spacing: 5) {
                             Text(game.feedback).font(.system(size: 24, weight: .bold)).italic()
@@ -54,8 +65,14 @@ struct TennisView: View {
             }
         }
         .sheet(isPresented: $showingSetup) { ControllerSetupView(motion: motion, done: { showingSetup = false }) }
-        .onChange(of: showingSetup) { if showingSetup { game.pause("Controller setup is open.") } }
+        .onChange(of: showingSetup) {
+            if showingSetup { game.pause("Controller setup is open.") }
+            else { game.prepareOpponent() }
+        }
         .sheet(isPresented: $showingCodexPrompt) { CodexOpponentPrompt() }
+        .sheet(isPresented: $showingSensorEvidence, onDismiss: { game.dismissOpponentInspector() }) {
+            SensorEvidenceView(motion: motion)
+        }
     }
 
     private var menu: some View {
@@ -63,12 +80,16 @@ struct TennisView: View {
             HStack {
                 GameMetric(value: "60", label: "SECONDS")
                 GameMetric(value: "5", label: "BALLS")
-                GameMetric(value: "∞", label: "ONE MORE RALLY")
+                GameMetric(value: "1", label: "REAL CONTROLLER")
             }.padding(.vertical, 3)
+            TennisHandoffCard(motion: motion, controllers: motion.controllers, ready: game.liveReady,
+                              openSetup: { showingSetup = true })
             GameRule(symbol: "figure.tennis", title: "You swing. Your player runs.",
-                     detail: "Meet the ball near your racket with a deliberate stroke.", color: courtBlue)
-            GameRule(symbol: "arrow.triangle.2.circlepath", title: "Keep the rally alive",
-                     detail: "Time your returns, build a streak, and beat your best.", color: courtBlue)
+                     detail: "Swing when the ball reaches your racket.", color: courtBlue)
+            MotionButton(action: openSensorEvidence) {
+                Label("How it works · sensor to racket", systemImage: "waveform.path")
+                    .font(WiiTheme.body(13, .semibold)).foregroundStyle(courtBlue)
+            }.buttonStyle(.plain)
         } options: {
             HStack {
                 Text("Choose your rival").font(WiiTheme.display(22))
@@ -76,20 +97,26 @@ struct TennisView: View {
                 Image(systemName: "figure.tennis").foregroundStyle(courtBlue)
             }
             VStack(spacing: 10) {
-                MotionButton { game.selectTacticalOpponent("baseten") } label: {
-                    GameOption(title: "Baseten", detail: "Model rival · normal speed", symbol: "sparkles",
-                               selected: !game.codexPractice && game.tacticalProvider == "baseten", accent: courtBlue)
+                MotionButton { game.selectTacticalOpponent("astra") } label: {
+                    GameOption(title: "Astra · OpenAI API", detail: "Chooses the shot · game moves the rival", symbol: "sparkles",
+                               selected: !game.codexPractice && game.tacticalProvider == "astra", accent: courtBlue)
                 }
                 MotionButton { game.selectTacticalOpponent("jev") } label: {
-                    GameOption(title: "Jev", detail: "A different rival. A fresh challenge.", symbol: "bolt.fill",
+                    GameOption(title: "Jev", detail: "Same state, shots and movement assistance", symbol: "bolt.fill",
                                selected: !game.codexPractice && game.tacticalProvider == "jev", accent: courtBlue)
                 }
+                MotionButton { game.selectTacticalOpponent("baseten") } label: {
+                    GameOption(title: "Baseten", detail: "Tactical rival · normal speed", symbol: "figure.tennis",
+                               selected: !game.codexPractice && game.tacticalProvider == "baseten", accent: courtBlue)
+                }
                 MotionButton { game.selectCodexOpponent(); showingCodexPrompt = true } label: {
-                    GameOption(title: "Codex", detail: "Computer-controlled practice · unranked", symbol: "cursorarrow.motionlines",
+                    GameOption(title: "Codex · computer use", detail: "Screen controls · slower play · unranked", symbol: "cursorarrow.motionlines",
                                selected: game.codexPractice, accent: courtBlue)
                 }
             }.buttonStyle(GameActionStyle())
             if game.codexPractice {
+                Text("Codex watches the screen, moves the rival and presses swing. Early swings are buffered. This mode does not call the OpenAI API from the game.")
+                    .font(WiiTheme.body(11)).foregroundStyle(WiiTheme.inkSoft)
                 MotionButton("Copy instructions for Codex") { showingCodexPrompt = true }
                     .buttonStyle(.plain).foregroundStyle(courtBlue).font(WiiTheme.body(12, .semibold))
             }
@@ -98,24 +125,13 @@ struct TennisView: View {
                 Text(motion.activeInputSimulated ? "Demo ready · score not saved" : game.codexPractice ? "Practice ready · invite Codex to play" : game.opponentStatus.label)
                     .fixedSize(horizontal: false, vertical: true)
             }.font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
-            Divider()
-            MotionButton { showingSetup = true } label: {
-                HStack {
-                    Image(systemName: "gamecontroller.fill")
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(game.inputReady ? "Controller ready" : "Connect a controller").font(WiiTheme.display(14))
-                        Text(game.inputReady ? motion.activeControllerName : "AirPod or iPhone").font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
-                    }
-                    Spacer(); Image(systemName: "chevron.right")
-                }.foregroundStyle(courtBlue).padding(.vertical, 4).contentShape(Rectangle())
-            }.buttonStyle(.plain)
             MotionButton(id: "start-tennis") {
-                if !game.inputReady { showingSetup = true }
+                if !game.liveReady { showingSetup = true }
                 else if !canStartRally { game.prepareOpponent() }
                 else { game.start(demo: motion.activeInputSimulated) }
             } label: {
-                GamePrimaryAction(title: !game.inputReady ? "Connect & play" : !canStartRally ? "Prepare rival · retry" : motion.activeInputSimulated ? "Start demo rally" : "Start rally",
-                                  symbol: game.inputReady ? "play.fill" : "gamecontroller.fill", accent: courtBlue)
+                GamePrimaryAction(title: !game.liveReady ? "Set up controller" : !canStartRally ? "Prepare rival · retry" : motion.activeInputSimulated ? "Start demo rally" : "Start rally",
+                                  symbol: game.liveReady ? "play.fill" : "gamecontroller.fill", accent: courtBlue)
             }.buttonStyle(GameActionStyle())
             HStack(spacing: 8) {
                 Image(systemName: "trophy.fill").foregroundStyle(courtBlue)
@@ -127,6 +143,7 @@ struct TennisView: View {
             if let standing = players.standings["Tennis"] {
                 Text(standing.challenge).font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
             }
+            if !game.codexPractice { TennisRivalEvidencePanel(status: game.opponentStatus) }
         }
     }
 
@@ -187,10 +204,11 @@ struct TennisView: View {
     private var footer: some View {
         HStack {
             Text("Tennis").font(WiiTheme.display(16))
-            Text(game.isDemo ? "DEMO · SCORE NOT SAVED" : game.state.assistedOpponent ? "CODEX PRACTICE · Drag rival, then swing · Unranked" : "Meet the ball. Keep the rally alive.").font(.system(size: 10, weight: .bold))
+            Text(game.codexPractice ? "COMPUTER USE · Slower play · Buffered swings · Unranked" : game.isDemo ? "SIMULATED INPUT · SCORE NOT SAVED" : "\(game.tacticalProvider.uppercased()) · MODEL SHOT / GAME MOVEMENT").font(.system(size: 10, weight: .bold))
                 .foregroundStyle(.white.opacity(0.8))
             Spacer(); Label(motion.activeControllerName, systemImage: "gamecontroller.fill").font(WiiTheme.body(12, .semibold))
-            Text("Ⓡ Recenter    ␣ Pause").font(.system(size: 13, weight: .medium))
+            MotionButton(action: openSensorEvidence) { Label("How it works", systemImage: "waveform.path") }
+                .buttonStyle(.plain).font(WiiTheme.body(12, .semibold))
             MotionButton { game.sound.toggle() } label: { Image(systemName: game.sound ? "speaker.wave.2" : "speaker.slash").frame(width: 36, height: 36) }.buttonStyle(.plain).accessibilityLabel(game.sound ? "Mute sound" : "Enable sound")
         }.foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 2, y: 1)
             .padding(24).background(LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .top, endPoint: .bottom))
@@ -205,9 +223,10 @@ struct TennisView: View {
             Image(systemName: "pause.circle.fill").font(.system(size: 40)).foregroundStyle(courtBlue)
             Text("Match paused").font(WiiTheme.display(36))
             Text(game.pauseReason).foregroundStyle(WiiTheme.inkSoft).multilineTextAlignment(.center)
-            Label(game.inputReady ? "\(motion.activeControllerName) ready" : "Waiting for \(motion.activeControllerName)", systemImage: game.inputReady ? "checkmark.circle.fill" : "airpodspro")
-                .foregroundStyle(game.inputReady ? courtBlue : .orange)
-            actionButton("Back to the court") { game.resume() }.disabled(!game.inputReady)
+            TennisHandoffCard(motion: motion, controllers: motion.controllers, ready: game.liveReady,
+                              openSetup: { showingSetup = true })
+            if !game.codexPractice { TennisRivalEvidencePanel(status: game.opponentStatus) }
+            actionButton("Resume rally") { game.resume() }.disabled(!game.liveReady)
             HStack(spacing: 22) { MotionButton("Controller setup") { showingSetup = true }; MotionButton("End run") { game.leave() } }
                 .buttonStyle(WiiButtonStyle())
         }
@@ -220,7 +239,7 @@ struct TennisView: View {
                 Text(game.state.completed ? game.state.rank : "↻").font(WiiTheme.display(78)).foregroundStyle(courtBlue)
                 VStack(alignment: .leading) {
                     Text(game.state.score.formatted()).font(WiiTheme.display(52)).monospacedDigit()
-                    Text(game.isDemo ? "SIMULATED RUN · NOT SAVED" : players.bests["Tennis"].map { "YOUR BEST \($0.formatted())" } ?? "BEST ON THIS MAC \(game.bestScore.formatted())")
+                    Text(game.codexPractice ? "COMPUTER-USE PRACTICE · NOT SAVED" : game.isDemo ? "SIMULATED RUN · NOT SAVED" : players.bests["Tennis"].map { "YOUR BEST \($0.formatted())" } ?? "BEST ON THIS MAC \(game.bestScore.formatted())")
                         .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
                 }
             }
@@ -231,11 +250,20 @@ struct TennisView: View {
             }
             RankProgressCard(players: players, runID: game.runID)
             Text(game.state.assistedOpponent ? "Practice run — score not saved." : players.saveStatus).font(.caption).foregroundStyle(.secondary)
-            actionButton("Play again") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.inputReady)
+            Text("Same controller · same rival · ready for another round").font(WiiTheme.body(12)).foregroundStyle(WiiTheme.inkSoft)
+            if !game.codexPractice { TennisRivalEvidencePanel(status: game.opponentStatus) }
+            actionButton("Replay rally") { game.start(demo: motion.activeInputSimulated) }.disabled(!game.liveReady || !canStartRally)
+            if !game.liveReady {
+                TennisHandoffCard(motion: motion, controllers: motion.controllers, ready: false,
+                                  openSetup: { showingSetup = true })
+            }
+            if !canStartRally {
+                MotionButton("Reconnect model rival") { game.prepareOpponent() }.buttonStyle(WiiButtonStyle())
+            }
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 MotionButton("Back to Aircade") { NotificationCenter.default.post(name: .wiiRouteRequest, object: Route.home) }
                 MotionButton("Next player") { game.leave(); players.nextPlayer() }
-                if !game.inputReady { MotionButton("Connect controller") { showingSetup = true } }
+                if !game.liveReady { MotionButton("Connect controller") { showingSetup = true } }
                 MotionButton("Leaderboard") { NSWorkspace.shared.open(players.leaderboardURL(for: "Tennis")) }
             }.buttonStyle(WiiButtonStyle())
         }
@@ -249,6 +277,11 @@ struct TennisView: View {
     }
     private func stat(_ value: String, _ label: String) -> some View {
         GameMetric(value: value, label: label)
+    }
+
+    private func openSensorEvidence() {
+        game.suspendOpponentForInspector()
+        showingSensorEvidence = true
     }
 
 }
