@@ -48,6 +48,7 @@ test('MongoDB profiles, privacy, idempotent scores, validation and leaderboards'
     assert.equal((await request('/api/tennis/opponent-plan', 'POST', { difficulty: 'rival', score: 0, misses: 0, longestRally: 0, candidates: [] })).status, 400);
     const opponentPlan = (await request('/api/tennis/opponent-plan', 'POST', { difficulty: 'rival', score: 400, misses: 1, longestRally: 4, candidates })).body;
     assert.equal(opponentPlan.fallbackUsed, true);
+    assert.equal((await request('/api/tennis/opponent-plan', 'POST', { difficulty: 'rival', score: 0, misses: 0, longestRally: 0, candidates, requireModel: true })).status, 503);
     assert.equal(opponentPlan.modelVersion, 'synthetic-logreg-v1');
     assert.deepEqual(new Set(opponentPlan.returns.map(value => value.candidateID)), new Set(candidates.map(value => value.id)));
     for (let i = 1; i < opponentPlan.returns.length; i++) {
@@ -185,7 +186,7 @@ test('Baseten LLM ranks only legal returns and reports remote inference', async 
     assert.equal(plan.provider, 'Baseten Model API');
     assert.equal(plan.modelVersion, 'qwen-3-4b-test');
     assert.equal(plan.fallbackUsed, false);
-    assert.equal(plan.returns[0].candidateID, 'deep-left');
+    assert.equal(plan.returns[0].candidateID, 'deep-right'); // Preserve model choice even when it repeats the prior lane.
     assert.deepEqual(new Set(plan.returns.map(value => value.candidateID)), new Set(candidates.map(value => value.id)));
     assert.equal(received.url, '/v1/chat/completions');
     assert.equal(received.authorization, 'Bearer test-key');

@@ -38,3 +38,17 @@ export async function evaluateJev(key,state,signal){
  }
  const result=await response.json();return{...decodeDecision(result),usage:result.usage,cost:Number(result.providerMetadata?.gateway?.cost)||0};
 }
+
+// Tactical mode: the model selects a shot; the local game animates court coverage.
+export async function evaluateJevShot(key, state, signal){
+ const candidates=state.candidates;
+ const response=await fetch('https://ai-gateway.vercel.sh/v1/evaluate',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},signal,body:JSON.stringify({
+  model:jevModel,providerOptions:{gateway:{only:['typesafe-ai']}},state,
+  questions:{shot:{type:'choice',instructions:'Choose the most useful tennis return against this player. Court movement and contact animation are automatic. Your choice directly sets shot direction, pace and stroke. Prefer changing placement from the previous return when tactically useful.',criteria:Object.fromEntries(candidates.map(c=>[c.id,`Aim x=${c.targetX}, flight ${c.flightDuration}s, ${c.stroke}.`]))}}
+ })});
+ if(!response.ok)throw Error(`Jev Gateway HTTP ${response.status}`);
+ const result=await response.json();
+ const selected=candidates.find(c=>c.id===result.answers?.shot?.choice);
+ if(result.model!==jevModel||!selected)throw Error('Invalid Jev shot');
+ return selected;
+}

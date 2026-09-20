@@ -66,10 +66,10 @@ struct AIChallengeView: View {
             if game.match.phase == .menu {
                 HStack {
                     MotionButton("Astra · screen") { game.connect(provider: "astra") }
-                    MotionButton("Jev · state") { game.connect(provider: "jev") }
-                    MotionButton("GLM · tactical") { tennis.leave(); tennis.codexPractice = false }
+                    MotionButton("Jev · normal speed") { tennis.selectTacticalOpponent("jev") }
+                    MotionButton("Baseten · normal speed") { tennis.selectTacticalOpponent("baseten") }
                 }.buttonStyle(WiiButtonStyle())
-                Text("Astra sees images. Jev receives measured positions. GLM's rally mode uses assisted interception.").font(.caption).multilineTextAlignment(.center)
+                Text("Astra uses slow screen control. Jev and Baseten choose shots at normal speed with automatic court coverage.").font(.caption).multilineTextAlignment(.center)
                 MotionButton("Watch Astra vs Jev") { game.connect(provider: "astra", exhibition: true) }.buttonStyle(WiiButtonStyle())
             }
             Text(game.status).font(.caption)

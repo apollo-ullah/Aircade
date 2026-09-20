@@ -2,14 +2,16 @@ import Foundation
 import MotionCore
 
 struct TennisOpponentStatus: Equatable {
-    var provider = "LOCAL"
-    var modelVersion = "automatic-v1"
+    var provider = "MODEL"
+    var modelVersion = "connecting"
     var latencyMS = 0
     var fallbackUsed = true
 
+    var decision = "Waiting for model plan"
+
     var label: String {
         let timing = latencyMS > 0 ? " · \(latencyMS) ms" : ""
-        return "\(provider.uppercased()) · \(modelVersion)\(timing)"
+        return "\(provider.uppercased()) · \(modelVersion)\(timing) · \(decision)"
     }
 }
 
@@ -30,6 +32,8 @@ final class BasetenTennisOpponent: TennisOpponentStrategy {
     }
 
     private struct PlanRequest: Codable {
+        let provider: String
+        let requireModel = true
         let playerID: String?
         let difficulty: String
         let score: Int
@@ -61,32 +65,41 @@ final class BasetenTennisOpponent: TennisOpponentStrategy {
     var onStatus: ((TennisOpponentStatus) -> Void)?
     private let lock = NSLock()
     private var plans: [TennisOpponentReturn] = [AutomaticReboundOpponent().returnPlan(rally: 0, sequence: 0)]
+    private(set) var provider = "baseten"
+    private var modelPlanAvailable = false
+    var hasModelPlan: Bool { lock.lock(); defer { lock.unlock() }; return modelPlanAvailable }
+    private var generation = 0
+    private var lastRefresh = -Double.infinity
     private var lastTargetX: Float?
     private var refreshing = false
 
     func returnPlan(rally: Int, sequence: Int) -> TennisOpponentReturn {
         lock.lock(); defer { lock.unlock() }
         guard !plans.isEmpty else { return AutomaticReboundOpponent().returnPlan(rally: rally, sequence: sequence) }
-        var chosenIndex = 0
-        if plans.count > 1, let lastTargetX {
-            for candidateIndex in plans.indices {
-                if abs(plans[candidateIndex].targetX - lastTargetX) > 0.1 { chosenIndex = candidateIndex; break }
-            }
-        }
-        let plan = plans[chosenIndex]
+        let plan = plans[0] // Preserve the model's first-ranked shot exactly.
         lastTargetX = plan.targetX
         return plan
     }
 
+    func select(provider: String) {
+        lock.lock(); defer { lock.unlock() }
+        self.provider = provider; generation += 1; refreshing = false
+        modelPlanAvailable = false; lastTargetX = nil; lastRefresh = -.infinity
+        plans = [AutomaticReboundOpponent().returnPlan(rally: 0, sequence: 0)]
+    }
+
     func refresh(playerID: String?, match: TennisMatch) {
         lock.lock()
-        guard !refreshing else { lock.unlock(); return }
+        guard !refreshing, ProcessInfo.processInfo.systemUptime - lastRefresh >= 2.2 else { lock.unlock(); return }
         refreshing = true
+        lastRefresh = ProcessInfo.processInfo.systemUptime
+        let epoch = generation
+        let provider = self.provider
         let previousReturnX = lastTargetX
         lock.unlock()
 
         let candidates = Self.candidates(rally: match.rally)
-        let payload = PlanRequest(playerID: playerID, difficulty: "rival", score: match.score,
+        let payload = PlanRequest(provider: provider, playerID: playerID, difficulty: "rival", score: match.score,
                                   misses: match.misses, longestRally: match.longestRally,
                                   incomingBallX: match.ball?.direction == .towardOpponent ? match.ball?.to.x : nil,
                                   opponentAttemptX: match.ball?.direction == .towardOpponent ? match.ball?.defenderContactX : nil,
@@ -94,30 +107,32 @@ final class BasetenTennisOpponent: TennisOpponentStrategy {
                                   candidates: candidates)
         Task { [weak self] in
             guard let self else { return }
-            defer { self.finishRefresh() }
+            defer { self.finishRefresh(epoch: epoch) }
             do {
                 let response = try await self.fetch(payload)
                 let valid = response.returns.compactMap(Self.validate)
-                guard !valid.isEmpty else { throw URLError(.cannotParseResponse) }
-                self.install(valid)
+                guard !response.fallbackUsed, !valid.isEmpty, valid.count == response.returns.count else { throw URLError(.cannotParseResponse) }
+                guard self.install(valid, epoch: epoch) else { return }
                 let status = TennisOpponentStatus(provider: response.provider, modelVersion: response.modelVersion,
-                                                  latencyMS: response.latencyMs, fallbackUsed: response.fallbackUsed)
-                await MainActor.run { self.onStatus?(status) }
+                                                  latencyMS: response.latencyMs, fallbackUsed: response.fallbackUsed, decision: "Model chose \(response.returns[0].candidateID)")
+                await MainActor.run { if self.generation == epoch { self.onStatus?(status) } }
             } catch {
-                let status = TennisOpponentStatus(provider: "LOCAL", modelVersion: "automatic-v1", latencyMS: 0, fallbackUsed: true)
-                await MainActor.run { self.onStatus?(status) }
+                let status = TennisOpponentStatus(provider: provider, modelVersion: self.hasModelPlan ? "cached model plan" : "unavailable", latencyMS: 0, fallbackUsed: !self.hasModelPlan, decision: self.hasModelPlan ? "Using last model-selected shot" : "Retry model connection")
+                await MainActor.run { if self.generation == epoch { self.onStatus?(status) } }
             }
         }
     }
 
-    private func install(_ newPlans: [TennisOpponentReturn]) {
+    private func install(_ newPlans: [TennisOpponentReturn], epoch: Int) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        plans = newPlans
+        guard generation == epoch else { return false }
+        plans = newPlans; modelPlanAvailable = true
+        return true
     }
 
-    private func finishRefresh() {
+    private func finishRefresh(epoch: Int) {
         lock.lock(); defer { lock.unlock() }
-        refreshing = false
+        if generation == epoch { refreshing = false }
     }
 
     private func fetch(_ payload: PlanRequest) async throws -> PlanResponse {

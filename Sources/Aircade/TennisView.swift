@@ -38,7 +38,10 @@ struct TennisView: View {
             }
         }
         .foregroundStyle(WiiTheme.ink).background(WiiTheme.stageMid).tint(courtBlue)
-        .onAppear { players.refreshLeaderboard("Tennis") }
+        .onAppear {
+            players.refreshLeaderboard("Tennis")
+            if !CommandLine.arguments.contains("--ai-challenge-preview") { game.prepareOpponent() }
+        }
         .sheet(isPresented: $players.showingSignIn, onDismiss: {
             if restoreCamera && motion.useCamera { motion.startCamera() }
             restoreCamera = false
@@ -76,16 +79,16 @@ struct TennisView: View {
 
             HStack(alignment: .top, spacing: 26) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Label("RALLY CHALLENGE", systemImage: "figure.tennis")
+                    Label("\(game.tacticalProvider == "jev" ? "JEV" : "BASETEN") · NORMAL SPEED", systemImage: "figure.tennis")
                         .font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(courtBlue)
                     Text("Tennis").font(.system(size: 52, weight: .bold)).tracking(-2)
                     Text("Keep the rally alive for 60 seconds.").font(.system(size: 19, weight: .medium))
-                    Text("Swing your AirPod or iPhone like a racket. Your animated rival tracks the ball and adapts its next return between points.")
+                    Text("Your player runs to the ball automatically. Swing your AirPod or iPhone to make contact. The model chooses the rival’s shot direction and pace.")
                         .font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(4)
                     HStack(spacing: 34) {
                         stat("60", "SECONDS")
                         stat("5", "BALLS")
-                        stat(game.opponentStatus.fallbackUsed ? "LOCAL" : "AI", "RIVAL")
+                        stat(game.opponentReady ? "AI" : "WAIT", "RIVAL")
                     }.padding(.vertical, 8)
                     Divider()
                     VStack(alignment: .leading, spacing: 12) {
@@ -94,12 +97,12 @@ struct TennisView: View {
                         rule("3", "RALLY", "Watch the rival move into position and answer your shot.")
                     }
                     MotionButton(id: "start-tennis") {
-                        if game.inputReady { game.start(demo: motion.activeInputSimulated) }
+                        if game.inputReady { if game.opponentReady { game.start(demo: motion.activeInputSimulated) } else { game.prepareOpponent() } }
                         else { showingSetup = true }
                     } label: {
                         HStack {
                             Image(systemName: "play.circle.fill").font(.title2)
-                            Text(game.inputReady ? (players.player == nil ? "Play as guest" : "Start rally") : "Connect your controller")
+                            Text(game.inputReady ? (!game.opponentReady ? "Prepare model · tap to retry" : players.player == nil ? "Play as guest" : "Start rally") : "Connect your controller")
                             Spacer(); Image(systemName: "chevron.right")
                         }.font(.system(size: 18, weight: .bold)).padding(.vertical, 6)
                     }.buttonStyle(WiiButtonStyle(primary: true))
@@ -119,13 +122,17 @@ struct TennisView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("AI CHALLENGERS", systemImage: "eye").font(.caption.bold())
                         Text("Choose your rival").font(.title2.bold())
-                        Text("Astra watches. Jev evaluates. Try a challenge or watch them play each other.").font(.callout).foregroundStyle(.secondary)
-                        MotionButton("AI challenge") { game.challengeSelected = true; game.challenge.connect() }.buttonStyle(WiiButtonStyle(primary: true))
+                        Text("Jev and Baseten: normal-speed rallies. Astra: slower computer-use challenge.").font(.callout).foregroundStyle(.secondary)
+                        HStack {
+                            MotionButton("Baseten") { game.selectTacticalOpponent("baseten") }
+                            MotionButton("Jev") { game.selectTacticalOpponent("jev") }
+                        }.buttonStyle(WiiButtonStyle())
+                        MotionButton("Astra / Exhibition") { game.challengeSelected = true; game.challenge.connect() }.buttonStyle(WiiButtonStyle(primary: true))
                     }.padding(20).frame(width: 300).wiiPanel()
                     Spacer()
                     VStack(alignment: .leading, spacing: 12) {
                         Text("MODEL OPPONENT").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(courtBlue)
-                        Text("A local policy keeps every rally responsive. When Baseten is configured, it shapes the next return plan.")
+                        Text("Automatic running keeps rallies fluid. The selected model chooses direction and pace; its last valid shot stays active while the next decision loads.")
                             .font(.callout).foregroundStyle(.secondary)
                         Text(game.opponentStatus.label).font(.system(size: 9, weight: .bold, design: .monospaced))
                             .foregroundStyle(game.opponentStatus.fallbackUsed ? .orange : .green)

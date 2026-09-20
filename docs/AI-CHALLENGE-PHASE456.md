@@ -3,6 +3,29 @@
 Implementation: September 19, 2026. Vercel billing verification is resolved and
 real Jev inference works. Physical-controller acceptance remains pending.
 
+## Normal-speed update after physical playtesting
+
+Jev and Baseten now enter the normal Tennis rally engine through the rival selector.
+Their model-selected shots take 2.42–2.88 seconds, and human returns no longer add
+an artificial 1.5 seconds. The player moves laterally at six court units/second;
+collision uses the same translated racket shown on screen. Automatic movement
+cannot create a hit by itself: a user rotation or translation is required.
+Astra's screen-control challenge and Astra/Jev exhibition retain eight-second flights.
+Historical state-control Jev evidence below refers to the earlier experimental mode.
+
+Both tactical providers choose a legal shot (direction, pace, stroke). Local code
+animates court coverage/contact; it does not reorder the model's selection. Baseten's
+server-side lane alternation and native repeat-avoidance overrides were removed,
+and the full chosen lane is preserved instead of clamping every shot near centre.
+The UI reports the model's chosen candidate. New live games require an initial
+remote model plan. During inference/failure, the last valid model-selected shot is
+retained with an explicit cached-plan status; no local fallback is substituted.
+
+Live native verification passed for both providers: Baseten GLM-5.3-Flash selected
+`deep-left` in 863 ms; Jev selected `deep-left` in 1,013 ms. The test checks that
+repeated `returnPlan` calls and physics validation preserve that exact selection
+and normal flight speed. This is separate from physical-controller playtesting.
+
 ## Implemented
 
 - **Opponent selection:** Astra / screen control; Jev / measured-state control;

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluationBody,decodeDecision,jevModel,evaluateJev} from './jev.mjs';
+import {evaluationBody,decodeDecision,jevModel,evaluateJev,evaluateJevShot} from './jev.mjs';
 test('Jev uses typed lane and swing decisions with no model substitution',()=>{
  const body=evaluationBody({recentObservations:[{ball:{x:1,y:0,z:-15},incoming:true}]});
  assert.equal(body.model,jevModel);assert.equal(body.questions.position.type,'choice');assert.equal(body.questions.swing.type,'boolean');
@@ -22,5 +22,16 @@ test('Rate limits preserve Retry-After without exposing the provider response',a
     assert.equal(error.message,'Jev Gateway HTTP 429');assert.equal(error.retryable,true);assert.equal(error.retryAfterMS,expected);return true;
    });
   }
+ }finally{globalThis.fetch=original}
+});
+
+test('Tactical Jev preserves its selected legal shot and rejects invented shots',async()=>{
+ const original=globalThis.fetch;
+ const state={candidates:[{id:'left',targetX:-3.1,flightDuration:2.7,delay:0.3,stroke:'forehand'},{id:'right',targetX:3.1,flightDuration:2.5,delay:0.3,stroke:'backhand'}]};
+ try{
+  globalThis.fetch=async(_,req)=>{const body=JSON.parse(req.body);assert.equal(body.questions.shot.type,'choice');return Response.json({model:jevModel,answers:{shot:{choice:'right'}}})};
+  assert.equal((await evaluateJevShot('secret',state,AbortSignal.timeout(1000))).targetX,3.1);
+  globalThis.fetch=async()=>Response.json({model:jevModel,answers:{shot:{choice:'invented'}}});
+  await assert.rejects(()=>evaluateJevShot('secret',state,AbortSignal.timeout(1000)),/Invalid Jev shot/);
  }finally{globalThis.fetch=original}
 });

@@ -69,7 +69,7 @@ final class ArcadeSessionIntegrationTests: XCTestCase {
         init() throws {
             directory = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
             defaults = UserDefaults(suiteName: suite)!
-            model = MotionModel(logDirectory: directory, scoreDefaults: defaults)
+            model = MotionModel(logDirectory: directory, scoreDefaults: defaults, tennisOpponent: AutomaticReboundOpponent())
             model.clock = { [unowned self] in self.time }
             model.gripDefaults = defaults
             model.smoothing = 0

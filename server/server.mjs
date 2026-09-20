@@ -1,4 +1,5 @@
 import express from 'express';
+import { gatewayKey, evaluateJevShot } from '../tools/astra-arena/jev.mjs';
 import { MongoClient } from 'mongodb';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -100,19 +101,6 @@ function opponentPlan(body, inference, metadata) {
   };
 }
 
-function alternateZones(candidates) {
-  const ordered = [], remaining = [...candidates];
-  while (remaining.length) {
-    const previousSide = ordered.at(-1)?.targetX < -0.2 ? 'left' : ordered.at(-1)?.targetX > 0.2 ? 'right' : 'center';
-    const index = remaining.findIndex(candidate => {
-      const side = candidate.targetX < -0.2 ? 'left' : candidate.targetX > 0.2 ? 'right' : 'center';
-      return side !== previousSide;
-    });
-    ordered.push(remaining.splice(index < 0 ? 0 : index, 1)[0]);
-  }
-  return ordered;
-}
-
 function opponentPlanFromRanking(body, rankedIDs, metadata) {
   const byID = new Map(body.candidates.map(candidate => [candidate.id, candidate]));
   if (!Array.isArray(rankedIDs) || rankedIDs.length !== body.candidates.length
@@ -120,15 +108,7 @@ function opponentPlanFromRanking(body, rankedIDs, metadata) {
       || rankedIDs.some(id => typeof id !== 'string' || !byID.has(id))) {
     throw new Error('Baseten LLM returned an invalid candidate ranking');
   }
-  const ordered = alternateZones(rankedIDs.map(id => byID.get(id)));
-  // The LLM may deterministically rank the same lane first for similar state.
-  // Rotate a different legal lane to the front so consecutive returns still
-  // make the player cover the full five-lane court.
-  if (finite(body.previousReturnX) && ordered.length > 1
-      && Math.abs(ordered[0].targetX - body.previousReturnX) <= 0.1) {
-    const different = ordered.findIndex(candidate => Math.abs(candidate.targetX - body.previousReturnX) > 0.1);
-    if (different > 0) ordered.unshift(ordered.splice(different, 1)[0]);
-  }
+  const ordered = rankedIDs.map(id => byID.get(id));
   return {
     provider: metadata.provider,
     modelVersion: metadata.modelVersion,
@@ -252,10 +232,21 @@ async function fetchBasetenPlan(body) {
     latencyMs: Math.round(performance.now() - started), fallbackUsed: false
   });
 }
+let lastJevRequest = -Infinity;
+async function fetchJevPlan(body) {
+  const key = await gatewayKey();
+  if (!key) throw Error('Jev key missing');
+  if (performance.now() - lastJevRequest < 2200) throw Error('Jev planning cooldown');
+  lastJevRequest = performance.now();
+  const started = performance.now();
+  const selected = await evaluateJevShot(key, body, AbortSignal.timeout(6000));
+  return { provider: 'Vercel Jev', modelVersion: 'typesafe-ai/jev', latencyMs: Math.round(performance.now()-started), fallbackUsed: false,
+    returns: [{ candidateID: selected.id, targetX: selected.targetX, flightDuration: selected.flightDuration, delay: selected.delay, stroke: selected.stroke, returnProbability: 1 }] };
+}
 app.get('/api/health', asyncRoute(async (_, res) => { await db.command({ ping: 1 }); res.json({ ok: true }); }));
 app.post('/api/tennis/opponent-plan', auth, asyncRoute(async (req, res) => {
   const body = req.body;
-  if (!body || (body.playerID != null && !validID(body.playerID)) || body.difficulty !== 'rival'
+  if (!body || (body.provider != null && !['baseten','jev'].includes(body.provider)) || (body.playerID != null && !validID(body.playerID)) || body.difficulty !== 'rival'
       || !Number.isInteger(body.score) || body.score < 0 || body.score > 1000000
       || !Number.isInteger(body.misses) || body.misses < 0 || body.misses > 1000
       || !Number.isInteger(body.longestRally) || body.longestRally < 0 || body.longestRally > 1000
@@ -268,6 +259,7 @@ app.post('/api/tennis/opponent-plan', auth, asyncRoute(async (req, res) => {
     return res.status(400).json({ error: 'Invalid tennis opponent request' });
   }
   try {
+    if(body.provider === 'jev') return res.json(await fetchJevPlan(body));
     const llm = await fetchBasetenLLMPlan(body);
     if (llm) {
       const incoming = finite(body.incomingBallX) ? body.incomingBallX.toFixed(2) : 'serve';
@@ -286,6 +278,7 @@ app.post('/api/tennis/opponent-plan', auth, asyncRoute(async (req, res) => {
   } catch (error) {
     console.warn(`Baseten opponent fallback: ${error.message}`);
   }
+  if(body.requireModel === true || body.provider === 'jev') return res.status(503).json({error:'Model plan unavailable; retry shortly'});
   res.json(opponentPlan(body, localOpponentPredictions(body.candidates), {
     provider: 'Local fallback', modelVersion: localOpponentModel.modelVersion, latencyMs: 0, fallbackUsed: true
   }));

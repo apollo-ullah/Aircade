@@ -60,9 +60,8 @@ public struct TennisOpponentReturn {
     /// impossible flight into the deterministic match.
     public func validated(fallback: TennisOpponentReturn) -> TennisOpponentReturn {
         guard targetX.isFinite, flightDuration.isFinite, delay.isFinite else { return fallback }
-        // AirPods provide rotation but no lateral translation. Keep shots that
-        // come toward the player inside the fixed racket's reachable lane.
-        return TennisOpponentReturn(targetX: min(0.9, max(-0.9, targetX)),
+        // Automatic court coverage makes the full legal shot lanes reachable.
+        return TennisOpponentReturn(targetX: min(3.5, max(-3.5, targetX)),
                                     flightDuration: min(4, max(0.85, flightDuration)),
                                     delay: min(0.8, max(0.18, delay)), stroke: stroke)
     }
@@ -212,7 +211,7 @@ public struct TennisMatch {
                 let plan = validatedPlan(opponent)
                 let prepared = TennisOpponentReturn(targetX: plan.targetX, flightDuration: plan.flightDuration,
                                                     delay: plan.delay,
-                                                    stroke: opponentContactX >= 0 ? .forehand : .backhand)
+                                                    stroke: plan.stroke)
                 pendingPlan = prepared
                 nextOpponentReturn = elapsed + prepared.delay
                 events.append(.opponentPreparing(contactX: opponentContactX, stroke: prepared.stroke, delay: prepared.delay))
@@ -269,7 +268,7 @@ public struct TennisMatch {
         // RacketGeometry emits a normalized lane (-1.1...1.1); expand that
         // across the visible court while preserving the direct strategy API.
         let aim = max(-4.6, min(4.6, targetX * 4.18))
-        let duration = min(4, max(0.85, flightDuration + 1.5))
+        let duration = min(4, max(0.85, flightDuration))
         let distance = abs(aim - opponentContactX)
         let movement = Float(duration) * 1.35
         let attemptedX: Float

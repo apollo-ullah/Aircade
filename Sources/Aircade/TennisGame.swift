@@ -14,6 +14,16 @@ final class TennisGame: ObservableObject {
     var displayPhase: TennisPhase { challengeSelected ? challenge.match.phase : state.phase }
     @Published private(set) var state = TennisMatch()
     @Published var codexPractice = false
+    @Published private(set) var tacticalProvider = "baseten"
+    private(set) var playerCourtX: Float = 0
+    var opponentReady: Bool { codexPractice || modelOpponent == nil || modelOpponent?.hasModelPlan == true }
+    func prepareOpponent() { modelOpponent?.refresh(playerID: activePlayerID?(), match: state) }
+    func selectTacticalOpponent(_ provider: String) {
+        leave(); codexPractice = false; tacticalProvider = provider
+        modelOpponent?.select(provider: provider)
+        opponentStatus = TennisOpponentStatus(provider: provider, modelVersion: "connecting", decision: "Preparing model shot")
+        prepareOpponent()
+    }
     @Published var enabled = false
     @Published var inputReady = false
     @Published var feedback = ""
@@ -45,6 +55,7 @@ final class TennisGame: ObservableObject {
     private var timer: Timer?
     private var lastTick: Double
     private var previousPose: SaberPose?
+    private var previousUserPose: SaberPose?
     private var previousTime: Double?
     private var previousBall: (id: Int, point: SIMD3<Float>)?
     private var lastInput = 0.0
@@ -79,6 +90,7 @@ final class TennisGame: ObservableObject {
         guard enabled else { return }
         if let authorizeRun, !authorizeRun() { return }
         guard liveReady else { return }
+        guard demo || opponentReady else { prepareOpponent(); return }
         if !resultSaved { onRunAbandoned?(runID) }
         runID = onRunStarted?(demo || codexPractice)
         isDemo = demo || codexPractice
@@ -95,6 +107,7 @@ final class TennisGame: ObservableObject {
         manualOpponentX = 0
         state.updateOpponentControl(positionX: codexPractice ? 0 : nil, didSwing: false)
         lastTick = now
+        playerCourtX = 0
         scene.clearTennis()
         modelOpponent?.refresh(playerID: activePlayerID?(), match: state)
     }
@@ -182,14 +195,21 @@ final class TennisGame: ObservableObject {
         inputReady = true
         lastInput = time
         if challengeSelected { challenge.input(pose: pose, time: time); return }
+        let rawPose = pose
+        let pose = SaberPose(position: pose.position + SIMD3<Float>(playerCourtX, 0, 0), orientation: pose.orientation)
         guard state.phase == .playing else { previousPose = nil; previousTime = nil; previousBall = nil; return }
         if let previousTime, time <= previousTime { return }
         defer {
+            previousUserPose = rawPose
             previousPose = pose; previousTime = time
             previousBall = state.ball.flatMap { $0.direction == .towardPlayer ? ($0.id, $0.position(at: state.elapsed)) : nil }
         }
         guard !recoveringInput, let previousPose, let previousTime, let previousBall,
               let ball = state.ball, ball.direction == .towardPlayer, ball.id == previousBall.id else { return }
+        // Automatic running must not count as a user swing.
+        let rotation = (pose.orientation * previousPose.orientation.inverse).angle
+        let userTranslation = previousUserPose.map { simd_distance(rawPose.position, $0.position) / Float(time - previousTime) } ?? 0
+        guard min(rotation, 2 * .pi - rotation) / Float(time - previousTime) > 0.5 || userTranslation > 0.75 else { return }
         let centre = ball.position(at: state.elapsed)
         guard let contact = RacketGeometry.sweep(from: previousPose, to: pose, dt: time - previousTime,
                                                   ballFrom: previousBall.point, ballTo: centre),
@@ -227,6 +247,10 @@ final class TennisGame: ObservableObject {
         for event in state.advance(min(delta, 0.1) * pace, opponent: opponent) {
             handle(event, point: state.ball?.position(at: state.elapsed) ?? SIMD3<Float>(0, 0, 0), velocity: .zero)
         }
+        let target = state.ball.flatMap { $0.direction == .towardPlayer ? $0.to.x : nil } ?? 0
+        let step = Float(min(delta, 0.1)) * 6
+        playerCourtX += min(step, max(-step, target - playerCourtX))
+        scene.setTennisPlayerX(playerCourtX)
         scene.syncTennis(ball: state.ball, elapsed: state.elapsed, manualOpponent: manualOpponentEnabled)
         if state.phase == .results { finish() }
     }
@@ -277,7 +301,7 @@ final class TennisGame: ObservableObject {
             feedback = state.rally >= 8 ? "HOT RALLY" : state.rally >= 4 ? "NICE RETURN" : "GOOD SHOT"
             scene.tennisImpact(at: point, velocity: velocity)
             if sound { GameAudio.shared.play("Pop") }
-            modelOpponent?.refresh(playerID: activePlayerID?(), match: state)
+            prepareOpponent()
         case .opponentMiss(let ballX, let attemptedX, let points):
             feedbackGood = true
             feedbackPoints = points
@@ -289,7 +313,7 @@ final class TennisGame: ObservableObject {
             feedbackPoints = 0
             feedback = "OUT OF REACH"
             if sound { GameAudio.shared.play("Tink") }
-            modelOpponent?.refresh(playerID: activePlayerID?(), match: state)
+            prepareOpponent()
         case .finished:
             break
         }

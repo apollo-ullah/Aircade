@@ -51,7 +51,7 @@ final class SoloFeedbackRecoveryTests: XCTestCase {
         init() throws {
             directory = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
             defaults = UserDefaults(suiteName: suite)!
-            model = MotionModel(logDirectory: directory, scoreDefaults: defaults)
+            model = MotionModel(logDirectory: directory, scoreDefaults: defaults, tennisOpponent: AutomaticReboundOpponent())
             model.gripDefaults = defaults
             model.game.sound = false; model.game.renderingEnabled = false; model.tennis.sound = false
             model.startControllerSession()
@@ -195,7 +195,7 @@ final class SoloFeedbackRecoveryTests: XCTestCase {
         let defaults = UserDefaults(suiteName: "com.aircade.resume-callback.\(UUID().uuidString)")!
         let scene = SaberScene()
         let rush = ArcadeGame(scene: scene, automaticTimer: false, clock: { now }, scoreDefaults: defaults)
-        let tennis = TennisGame(scene: scene, automaticTimer: false, clock: { now }, scoreDefaults: defaults)
+        let tennis = TennisGame(scene: scene, opponent: AutomaticReboundOpponent(), automaticTimer: false, clock: { now }, scoreDefaults: defaults)
         tennis.enabled = true
         var callbacks: [String?] = []
         rush.onRunStarted = { _ in "rush" }; tennis.onRunStarted = { _ in "tennis" }

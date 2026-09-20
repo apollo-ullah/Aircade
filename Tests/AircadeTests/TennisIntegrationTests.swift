@@ -24,6 +24,24 @@ final class TennisIntegrationTests: XCTestCase {
         XCTAssertEqual(rig.starts, [false, true])
     }
 
+    func testAutomaticCourtCoverageDoesNotHitWithoutASwing() throws {
+        struct WideOpponent: TennisOpponentStrategy {
+            func returnPlan(rally: Int, sequence: Int) -> TennisOpponentReturn {
+                TennisOpponentReturn(targetX: 3.1, flightDuration: 2.6, delay: 0.3)
+            }
+        }
+        let rig = Rig(opponent: WideOpponent())
+        rig.run(until: { rig.game.state.ball?.direction == .towardPlayer })
+        let ball = try XCTUnwrap(rig.game.state.ball)
+        XCTAssertEqual(ball.to.x, 3.1, accuracy: 0.001)
+        XCTAssertLessThan(ball.duration, 3)
+        for _ in 0..<90 { rig.step() }
+        XCTAssertEqual(rig.game.playerCourtX, 3.1, accuracy: 0.01)
+        XCTAssertEqual(rig.game.state.rally, 0)
+        rig.run(until: { rig.game.state.misses > 0 })
+        XCTAssertEqual(rig.game.state.misses, 1)
+    }
+
     final class Clock { var time = 100.0 }
 
     final class Rig {
@@ -41,10 +59,10 @@ final class TennisIntegrationTests: XCTestCase {
             SaberPose(position: hilt, orientation: simd_quatf(angle: .pi / 2, axis: SIMD3<Float>(1, 0, 0)))
         }
 
-        init(demo: Bool = true) {
+        init(demo: Bool = true, opponent: any TennisOpponentStrategy = AutomaticReboundOpponent()) {
             defaults = UserDefaults(suiteName: suite)!
             let clock = self.clock
-            game = TennisGame(scene: SaberScene(), automaticTimer: false, clock: { clock.time }, scoreDefaults: defaults)
+            game = TennisGame(scene: SaberScene(), opponent: opponent, automaticTimer: false, clock: { clock.time }, scoreDefaults: defaults)
             game.enabled = true
             game.sound = false
             game.onRunStarted = { [weak self] demo in
@@ -87,7 +105,7 @@ final class TennisIntegrationTests: XCTestCase {
             guard let ball = game.state.ball, ball.direction == .towardPlayer else { return parked }
             let contactTime = ball.arrival - 0.14
             let target = simd_quatf(from: SIMD3<Float>(0, 1, 0),
-                                   to: simd_normalize(ball.position(at: contactTime) - hilt))
+                                   to: simd_normalize(ball.position(at: contactTime) - hilt - SIMD3<Float>(game.playerCourtX, 0, 0)))
             let q = game.state.elapsed < contactTime
                 ? simd_quatf(angle: Float(4.8 * dt), axis: SIMD3<Float>(1, 0, 0)) * target : target
             return SaberPose(position: hilt, orientation: q)
