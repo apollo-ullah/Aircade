@@ -8,17 +8,16 @@ struct TennisView: View {
     @ObservedObject var players: PlayerSession
     @State private var restoreCamera = false
     @State private var showingSetup = false
+    @State private var showingCodexPrompt = false
     private let courtBlue = WiiTheme.accentDeep
 
     var body: some View {
         ZStack {
             SaberView(controller: motion.scene).ignoresSafeArea()
-            if !game.challengeSelected && game.codexPractice && (game.state.phase == .playing || game.state.phase == .countdown) {
+            if game.codexPractice && (game.state.phase == .playing || game.state.phase == .countdown) {
                 directOpponentSurface
             }
-            if game.challengeSelected {
-                AIChallengeView(motion: motion, tennis: game, game: game.challenge, players: players, setup: { showingSetup = true })
-            } else if game.state.phase == .menu { menu }
+            if game.state.phase == .menu { menu }
             else {
                 VStack(spacing: 0) {
                     hud
@@ -40,7 +39,7 @@ struct TennisView: View {
         .foregroundStyle(WiiTheme.ink).background(WiiTheme.stageMid).tint(courtBlue)
         .onAppear {
             players.refreshLeaderboard("Tennis")
-            if !CommandLine.arguments.contains("--ai-challenge-preview") { game.prepareOpponent() }
+            if !game.codexPractice { game.prepareOpponent() }
         }
         .sheet(isPresented: $players.showingSignIn, onDismiss: {
             if restoreCamera && motion.useCamera { motion.startCamera() }
@@ -55,6 +54,7 @@ struct TennisView: View {
         }
         .sheet(isPresented: $showingSetup) { ControllerSetupView(motion: motion, done: { showingSetup = false }) }
         .onChange(of: showingSetup) { if showingSetup { game.pause("Controller setup is open.") } }
+        .sheet(isPresented: $showingCodexPrompt) { CodexOpponentPrompt() }
     }
 
     private var menu: some View {
@@ -63,7 +63,6 @@ struct TennisView: View {
                 Text("aircade").foregroundStyle(courtBlue).font(.system(size: 34, weight: .medium)).tracking(-1)
                 Rectangle().fill(courtBlue.opacity(0.25)).frame(width: 1, height: 30)
                 MotionButton("Neon Rush") { motion.selectSport(.neonRush) }.buttonStyle(.plain).foregroundStyle(.secondary)
-                Toggle("Codex practice", isOn: $game.codexPractice).toggleStyle(.switch)
                 Text("Tennis").fontWeight(.bold).foregroundStyle(courtBlue)
                 Spacer()
                 if let player = players.player {
@@ -79,7 +78,7 @@ struct TennisView: View {
 
             HStack(alignment: .top, spacing: 26) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Label("\(game.tacticalProvider == "jev" ? "JEV" : "BASETEN") · NORMAL SPEED", systemImage: "figure.tennis")
+                    Label(game.codexPractice ? "CODEX · COMPUTER CONTROL" : "\(game.tacticalProvider == "jev" ? "JEV" : "BASETEN") · NORMAL SPEED", systemImage: "figure.tennis")
                         .font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(courtBlue)
                     Text("Tennis").font(.system(size: 52, weight: .bold)).tracking(-2)
                     Text("Keep the rally alive for 60 seconds.").font(.system(size: 19, weight: .medium))
@@ -122,20 +121,40 @@ struct TennisView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("AI CHALLENGERS", systemImage: "eye").font(.caption.bold())
                         Text("Choose your rival").font(.title2.bold())
-                        Text("Jev and Baseten: normal-speed rallies. Astra: slower computer-use challenge.").font(.callout).foregroundStyle(.secondary)
+                        Text("Use a model rival, or let Codex control the visible opponent with its mouse.").font(.callout).foregroundStyle(.secondary)
                         HStack {
-                            MotionButton("Baseten") { game.selectTacticalOpponent("baseten") }
-                            MotionButton("Jev") { game.selectTacticalOpponent("jev") }
-                        }.buttonStyle(WiiButtonStyle())
-                        MotionButton("Astra / Exhibition") { game.challengeSelected = true; game.challenge.connect() }.buttonStyle(WiiButtonStyle(primary: true))
+                            MotionButton {
+                                game.selectTacticalOpponent("baseten")
+                            } label: {
+                                Label("Baseten", systemImage: !game.codexPractice && game.tacticalProvider == "baseten" ? "checkmark.circle.fill" : "circle")
+                            }
+                            .buttonStyle(WiiButtonStyle(primary: !game.codexPractice && game.tacticalProvider == "baseten"))
+
+                            MotionButton {
+                                game.selectTacticalOpponent("jev")
+                            } label: {
+                                Label("Jev", systemImage: !game.codexPractice && game.tacticalProvider == "jev" ? "checkmark.circle.fill" : "circle")
+                            }
+                            .buttonStyle(WiiButtonStyle(primary: !game.codexPractice && game.tacticalProvider == "jev"))
+                        }
+                        MotionButton {
+                            game.selectCodexOpponent()
+                            showingCodexPrompt = true
+                        } label: {
+                            Label("Codex · computer use", systemImage: game.codexPractice ? "checkmark.circle.fill" : "cursorarrow.motionlines")
+                        }
+                        .buttonStyle(WiiButtonStyle(primary: game.codexPractice))
                     }.padding(20).frame(width: 300).wiiPanel()
                     Spacer()
                     VStack(alignment: .leading, spacing: 12) {
                         Text("MODEL OPPONENT").font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(courtBlue)
-                        Text("Automatic running keeps rallies fluid. The selected model chooses direction and pace; its last valid shot stays active while the next decision loads.")
+                        Text(game.codexPractice
+                             ? "Codex watches this window, drags the far player into position, and presses Rival Swing. No game API or Astra service is used."
+                             : "Automatic running keeps rallies fluid. The selected model chooses direction and pace; its last valid shot stays active while the next decision loads.")
                             .font(.callout).foregroundStyle(.secondary)
-                        Text(game.opponentStatus.label).font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(game.opponentStatus.fallbackUsed ? .orange : .green)
+                        Text(game.codexPractice ? "LOCAL · WAITING FOR CODEX" : game.opponentStatus.label)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(game.codexPractice ? courtBlue : game.opponentStatus.fallbackUsed ? .orange : .green)
                     }.padding(20).frame(width: 300).wiiPanel()
                 }.frame(maxWidth: .infinity, alignment: .trailing)
             }.padding(24)
@@ -282,5 +301,64 @@ struct TennisView: View {
             Text(number).font(.system(size: 16, weight: .bold)).frame(width: 36, height: 36).foregroundStyle(courtBlue).background(courtBlue.opacity(0.08), in: Circle())
             VStack(alignment: .leading, spacing: 3) { Text(title).font(.system(size: 11, weight: .bold, design: .monospaced)).tracking(1); Text(subtitle).font(.caption).foregroundStyle(.secondary) }
         }
+    }
+}
+
+private struct CodexOpponentPrompt: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var copied = false
+
+    private let prompt = """
+    Play the far-side opponent in the Tennis game currently visible in the Aircade window. Use computer control on that same window and continue until the match ends.
+
+    Act immediately during play. Do not narrate, explain, or wait between actions. Inspect the screen frequently and prioritize mouse actions over messages.
+
+    Controls:
+    • Drag horizontally anywhere on the open court to move the far-side character left or right.
+    • Track the yellow ball. When it travels toward the far side, drag the opponent to the ball's projected horizontal arrival position as early as possible.
+    • Click RIVAL SWING as soon as the ball is traveling toward the far side. Early swings are buffered, so do not wait for exact contact.
+    • Keep repositioning while the ball is in flight. React to every rally until the result screen appears.
+
+    The human controls the near racket with an AirPod or iPhone. Control only the far opponent. If a menu is visible, wait for the human to start the rally. If the match is paused or finished, stop and report that briefly.
+    """
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Play against Codex").font(.title.bold())
+                    Text("Copy this into your Codex task, then return here and start the rally.")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                MotionButton { dismiss() } label: { Image(systemName: "xmark") }
+                    .buttonStyle(WiiButtonStyle())
+            }
+
+            ScrollView {
+                Text(prompt)
+                    .font(.system(size: 14, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(18)
+            }
+            .frame(height: 360)
+            .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 8))
+
+            MotionButton {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(prompt, forType: .string)
+                copied = true
+            } label: {
+                Label(copied ? "Copied — paste into Codex" : "Copy Codex prompt",
+                      systemImage: copied ? "checkmark.circle.fill" : "doc.on.doc")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(WiiButtonStyle(primary: true))
+        }
+        .padding(26)
+        .frame(width: 680, height: 560)
+        .background(WiiTheme.stage)
     }
 }

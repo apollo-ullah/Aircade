@@ -9,9 +9,7 @@ enum AircadeSport: String, CaseIterable {
 }
 
 final class TennisGame: ObservableObject {
-    @Published var challengeSelected = false
-    let challenge: AIChallengeGame
-    var displayPhase: TennisPhase { challengeSelected ? challenge.match.phase : state.phase }
+    var displayPhase: TennisPhase { state.phase }
     @Published private(set) var state = TennisMatch()
     @Published var codexPractice = false
     @Published private(set) var tacticalProvider = "baseten"
@@ -23,6 +21,11 @@ final class TennisGame: ObservableObject {
         modelOpponent?.select(provider: provider)
         opponentStatus = TennisOpponentStatus(provider: provider, modelVersion: "connecting", decision: "Preparing model shot")
         prepareOpponent()
+    }
+    func selectCodexOpponent() {
+        leave()
+        codexPractice = true
+        opponentStatus = TennisOpponentStatus(provider: "codex", modelVersion: "computer-use", decision: "Waiting for Codex to control the rival")
     }
     @Published var enabled = false
     @Published var inputReady = false
@@ -49,6 +52,7 @@ final class TennisGame: ObservableObject {
 
     private let scene: SaberScene
     private let opponent: any TennisOpponentStrategy
+    private let codexOpponent = AutomaticReboundOpponent()
     private let modelOpponent: BasetenTennisOpponent?
     private let clock: () -> Double
     private let scoreDefaults: UserDefaults
@@ -68,7 +72,6 @@ final class TennisGame: ObservableObject {
     init(scene: SaberScene, opponent: any TennisOpponentStrategy = BasetenTennisOpponent(), automaticTimer: Bool = true,
          clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }, scoreDefaults: UserDefaults = .standard) {
         self.scene = scene
-        self.challenge = AIChallengeGame(scene: scene)
         self.opponent = opponent
         self.modelOpponent = opponent as? BasetenTennisOpponent
         self.clock = clock
@@ -109,14 +112,10 @@ final class TennisGame: ObservableObject {
         lastTick = now
         playerCourtX = 0
         scene.clearTennis()
-        modelOpponent?.refresh(playerID: activePlayerID?(), match: state)
+        if !codexPractice { modelOpponent?.refresh(playerID: activePlayerID?(), match: state) }
     }
 
     func pause(_ reason: String = "Take a breath.") {
-        if challengeSelected {
-            if challenge.manual && reason == "Paused while Aircade was in the background." { return }
-            challenge.pause(reason); return
-        }
         guard state.phase == .playing || state.phase == .countdown else { return }
         pauseReason = reason
         state.pause()
@@ -127,7 +126,6 @@ final class TennisGame: ObservableObject {
     }
 
     func resume() {
-        if challengeSelected { if liveReady || challenge.exhibition { challenge.resume() }; return }
         guard state.phase == .paused, liveReady else { return }
         state.resume()
         lastTick = now
@@ -139,7 +137,6 @@ final class TennisGame: ObservableObject {
     }
 
     func leave() {
-        challenge.disconnect(); challengeSelected = false
         if !resultSaved, runID != nil { onRunAbandoned?(runID) }
         runID = nil
         state.quit()
@@ -152,14 +149,12 @@ final class TennisGame: ObservableObject {
     }
 
     func observeSimulatedInput(_ simulated: Bool) {
-        if challengeSelected && simulated { challenge.simulated = true }
         if simulated && (state.phase == .playing || state.phase == .countdown || state.phase == .paused) {
             isDemo = true
         }
     }
 
     func invalidateInput(_ reason: String = "Controller tracking paused. Reconnect or recenter, then resume.") {
-        if challengeSelected && challenge.exhibition { return }
         inputReady = false
         previousPose = nil
         previousBall = nil
@@ -169,15 +164,10 @@ final class TennisGame: ObservableObject {
     }
 
     func waitForFreshInput() {
-        if challengeSelected && challenge.exhibition { return }
         inputReady = false
         previousPose = nil
         previousBall = nil
         previousTime = nil
-        if challengeSelected {
-            if now - lastInput >= ArcadeGame.trackingLossDelay { challenge.pause("Controller disconnected. Reconnect, then resume.") }
-            return
-        }
         guard state.phase == .playing || state.phase == .countdown else { return }
         let age = now - lastInput
         if age >= ArcadeGame.trackingLossDelay {
@@ -194,7 +184,6 @@ final class TennisGame: ObservableObject {
         guard time.isFinite, time >= lastInput else { return }
         inputReady = true
         lastInput = time
-        if challengeSelected { challenge.input(pose: pose, time: time); return }
         let rawPose = pose
         let pose = SaberPose(position: pose.position + SIMD3<Float>(playerCourtX, 0, 0), orientation: pose.orientation)
         guard state.phase == .playing else { previousPose = nil; previousTime = nil; previousBall = nil; return }
@@ -226,10 +215,6 @@ final class TennisGame: ObservableObject {
         let time = now
         let delta = time - lastTick
         lastTick = time
-        if challengeSelected {
-            challenge.tick(delta: max(0, min(delta, 0.1)), now: time, inputReady: liveReady)
-            return
-        }
         if feedbackUntil < time { feedback = "" }
         guard state.phase == .playing || state.phase == .countdown else { return }
         guard liveReady else { waitForFreshInput(); return }
@@ -244,7 +229,7 @@ final class TennisGame: ObservableObject {
         // buffered by TennisMatch, so computer-control latency does not require
         // stopping the ball at the far baseline.
         let pace = state.assistedOpponent && state.ball?.direction == .towardOpponent ? 0.45 : 1.0
-        for event in state.advance(min(delta, 0.1) * pace, opponent: opponent) {
+        for event in state.advance(min(delta, 0.1) * pace, opponent: codexPractice ? codexOpponent : opponent) {
             handle(event, point: state.ball?.position(at: state.elapsed) ?? SIMD3<Float>(0, 0, 0), velocity: .zero)
         }
         let target = state.ball.flatMap { $0.direction == .towardPlayer ? $0.to.x : nil } ?? 0
@@ -301,7 +286,7 @@ final class TennisGame: ObservableObject {
             feedback = state.rally >= 8 ? "HOT RALLY" : state.rally >= 4 ? "NICE RETURN" : "GOOD SHOT"
             scene.tennisImpact(at: point, velocity: velocity)
             if sound { GameAudio.shared.play("Pop") }
-            prepareOpponent()
+            if !codexPractice { prepareOpponent() }
         case .opponentMiss(let ballX, let attemptedX, let points):
             feedbackGood = true
             feedbackPoints = points
@@ -313,7 +298,7 @@ final class TennisGame: ObservableObject {
             feedbackPoints = 0
             feedback = "OUT OF REACH"
             if sound { GameAudio.shared.play("Tink") }
-            prepareOpponent()
+            if !codexPractice { prepareOpponent() }
         case .finished:
             break
         }

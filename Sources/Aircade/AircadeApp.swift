@@ -68,7 +68,6 @@ struct AircadeApp: App {
                     if CommandLine.arguments.contains("--multiplayer") { motion.showMultiplayer(true) }
                     if CommandLine.arguments.contains("--duel-smoke") { DuelSmoke.run(motion) }
                     if CommandLine.arguments.contains("--tennis-smoke") { TennisSmoke.run(motion) }
-                    if CommandLine.arguments.contains("--ai-challenge-preview") { AIChallengePreview.run(motion) }
                     if CommandLine.arguments.contains("--shell-smoke") { ShellSmoke.run(motion) }
                     if CommandLine.arguments.contains("--leaderboard-preview") { LeaderboardPreview.run(motion) }
                     if CommandLine.arguments.contains("--audio-output-check") { AudioOutputCheck.run(motion) }
@@ -108,7 +107,6 @@ struct AircadeApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     if motion.showingMultiplayer { motion.multiplayer.close() }
-                    motion.tennis.challenge.disconnect()
                     motion.shutdownControllerSession(); motion.stop(); motion.camera.stop()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
@@ -142,11 +140,7 @@ struct AircadeApp: App {
                     else if motion.showingLab { motion.arena.launchAttack() }
                     else if motion.selectedSport == .tennis {
                         if motion.tennis.displayPhase == .paused { motion.tennis.resume() }
-                        else if motion.tennis.displayPhase == .menu || motion.tennis.displayPhase == .results {
-                            if motion.tennis.challengeSelected {
-                                if motion.tennis.liveReady || motion.tennis.challenge.exhibition { motion.tennis.challenge.start(playerName: motion.players.player?.nickname ?? "Guest", simulated: motion.activeInputSimulated, playerID: motion.players.player?.id, publicProfile: motion.players.player?.isPublic ?? false) }
-                            } else { motion.tennis.start(demo: motion.activeInputSimulated) }
-                        }
+                        else if motion.tennis.displayPhase == .menu || motion.tennis.displayPhase == .results { motion.tennis.start(demo: motion.activeInputSimulated) }
                         else { motion.tennis.pause() }
                     } else if motion.game.state.phase == .paused { motion.game.resume() }
                     else if motion.game.state.phase == .menu || motion.game.state.phase == .results { motion.game.start(demo: motion.activeInputSimulated) }

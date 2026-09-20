@@ -21,9 +21,6 @@ final class SaberScene {
     private let rushRoot = SCNNode()
     private let tennisRoot = SCNNode()
     private let tennisBall = SCNNode()
-    private var controlledRacket: SCNNode?
-    private var observationView: SCNView?
-    private var nearObservationView: SCNView?
     private let tennisOpponent = SCNNode()
     private let opponentSwingArm = SCNNode()
     private let opponentBody = SCNNode()
@@ -549,42 +546,6 @@ final class SaberScene {
                                                .rotateTo(x: 0, y: 0, z: 0, duration: movementTime)]))
         }
     }
-    func syncChallenge(_ match: AIChallengeMatch) {
-        if match.exhibition { pivot.simdPosition = match.nearPose.position; pivot.simdOrientation = match.nearPose.orientation }
-        syncTennis(ball: match.ball, elapsed: match.elapsed, controlled: true)
-        tennisOpponent.removeAllActions(); opponentBody.removeAllActions()
-        opponentSwingArm.isHidden = true
-        if controlledRacket == nil {
-            let racket = tennisEquipment.clone()
-            scene.rootNode.addChildNode(racket); controlledRacket = racket
-        }
-        controlledRacket?.isHidden = false
-        controlledRacket?.simdPosition = match.controller.pose.position
-        controlledRacket?.simdOrientation = match.controller.pose.orientation
-        tennisOpponent.position = SCNVector3(match.controller.x, -1.64, -18)
-    }
-
-    func endChallenge() {
-        controlledRacket?.isHidden = true; opponentSwingArm.isHidden = false
-    }
-
-    /// Dedicated camera behind the AI baseline. Screen-left is world +X.
-    func challengeJPEG(near: Bool = false) -> Data? {
-        if (near ? nearObservationView : observationView) == nil {
-            let view = SCNView(frame: NSRect(x: 0, y: 0, width: 1024, height: 510))
-            let camera = SCNNode(); camera.camera = SCNCamera()
-            camera.camera?.usesOrthographicProjection = true; camera.camera?.orthographicScale = 12.8
-            camera.position = SCNVector3(0, 13, near ? 9 : -27)
-            camera.look(at: SCNVector3(0, -0.5, -9))
-            view.scene = scene; view.pointOfView = camera
-            view.antialiasingMode = .none
-            if near { nearObservationView = view } else { observationView = view }
-        }
-        guard let image = (near ? nearObservationView : observationView)?.snapshot().tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: image) else { return nil }
-        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7])
-    }
-
     func prepareTennisOpponent(contactX: Float, stroke: TennisStroke, delay: Double) {
         tennisOpponent.removeAction(forKey: "track-ball")
         tennisOpponent.runAction(.move(to: SCNVector3(opponentBodyX(contactX: contactX, stroke: stroke), -1.64, Self.tennisOpponentZ), duration: min(0.16, delay)), forKey: "prepare")

@@ -27,7 +27,7 @@ struct WiiShell: View {
         if !flags.isDisjoint(with: ["--smoke-test", "--simple-calibration",
                                     "--live-test"]) { return .lab }
         if !flags.isDisjoint(with: ["--multiplayer", "--duel-smoke"]) { return .duel }
-        if !flags.isDisjoint(with: ["--tennis-preview", "--tennis-smoke", "--ai-challenge-preview"]) { return .tennis }
+        if !flags.isDisjoint(with: ["--tennis-preview", "--tennis-smoke"]) { return .tennis }
         return .home
     }
 

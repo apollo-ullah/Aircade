@@ -31,7 +31,7 @@ Run `./scripts/start-station.sh` in a separate Terminal, then launch the app. **
 
 ### Direct Codex opponent control
 
-Codex computer use can operate the opponent in the same Aircade window as the player. During a rally, dragging horizontally anywhere on the open court moves the far character. Once direct control is active, the **Rival Swing** button appears in the game HUD; press it near contact to return the ball. The opponent misses if it is farther than one court unit from the incoming ball or swings outside the contact window. The AirPod continues to control the near player's racket and Baseten continues to choose the opponent's outgoing return lane.
+Choose **Codex · computer use** on the Tennis menu and Aircade presents a ready-to-copy prompt for a Codex task. Codex operates the same visible Aircade window as the player: dragging horizontally anywhere on the open court moves the far character, and **Rival Swing** in the HUD returns the ball. Early swings are buffered to keep the visual-control loop responsive. The opponent still misses when it cannot reach the incoming ball. The AirPod continues to control the near player's racket. This mode uses a deterministic local return plan and makes no OpenAI or Baseten request from the game.
 
 ## Launch
 
@@ -191,4 +191,4 @@ The current public Core Motion API exposes one AirPods motion stream at a time, 
 - [Apple hand-pose detection](https://developer.apple.com/videos/play/wwdc2020/10653/): Vision exposes wrist and finger landmarks.
 - [Apple headphone motion](https://developer.apple.com/documentation/coremotion/cmheadphonemotionmanager): processed orientation, angular velocity, and acceleration.
 
-Codex practice is enabled by default for direct computer play. Returns toward the opponent travel at roughly half speed, and a rival swing made at any point during that flight is buffered until contact. The ball keeps moving continuously and position still matters. Practice scores are not saved; disable Codex practice on the Tennis menu for normal ranked timing.
+Codex control is enabled by choosing **Codex · computer use** on the Tennis menu. Returns toward the opponent travel at roughly half speed, and a rival swing made at any point during that flight is buffered until contact. The ball keeps moving continuously and position still matters. Codex-controlled runs are unranked; choose Baseten or Jev for normal ranked timing.
