@@ -1,0 +1,19 @@
+{
+  "name": "aircade-social-video",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "prepare:audio": "bash scripts/prepare-audio.sh",
+    "render": "remotion render src/index.ts AircadeOverview out/aircade-linkedin-12s.mp4 --codec=h264 --crf=16 --pixel-format=yuv420p",
+    "render:cinematic": "remotion render src/index.ts AircadeOverview out/aircade-linkedin-12s-cinematic.mp4 --codec=h264 --crf=15 --pixel-format=yuv420p",
+    "render:final": "bash scripts/render-final.sh"
+  },
+  "dependencies": {
+    "@remotion/cli": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "remotion": "latest"
+  },
+  "devDependencies": {}
+}

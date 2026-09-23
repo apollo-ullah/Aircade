@@ -7,8 +7,10 @@ DerivedData/
 xcuserdata/
 .local/
 server/node_modules/
+social-video/node_modules/
 tools/astra-probe/node_modules/
 Resources/Music/
 .env
+server/.env.local
 __pycache__/
 *.py[cod]
